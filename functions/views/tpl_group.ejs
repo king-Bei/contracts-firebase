@@ -1,0 +1,38 @@
+<div class='contract'>
+  <h2>國外團體旅遊定型化契約</h2>
+  <p>國外團體旅遊定型化契約範本</p>
+  <p>中華民國112年9月8日觀業字第1123002067函修正，並自112年9月15日生效</p>
+  <p>（本契約審閱期間至少一日，<%= createdAt %> 由甲方攜回審閱）</p>
+
+  <p>立契約書人</p>
+  <p>旅客/公司行號（以下稱甲方）：<%= travelerName %></p>
+  <p>旅行社名稱（以下稱乙方)：<%= agentName %></p>
+
+  <h3>第一條（旅遊團資訊）</h3>
+  <p>旅遊團名稱：<%= tourName %> (<%= groupCode %>)</p>
+  <p>旅遊地區：<%= country %></p>
+  <p>出發日期：<%= departureDate %> <%= departureTime %></p>
+  <p>旅遊費用：<%= price %></p>
+  <p>付款方式：<%= paymentMethod %></p>
+  <p>訂金金額：<%= deposit %></p>
+  <p>成團人數下限：<%= minGroupSize %></p>
+  <p>取消通知天數：<%= cancelNoticeDays %></p>
+
+  <h3>第二條（旅客資料）</h3>
+  <p>姓名：<%= travelerName %></p>
+  <p>身分證號：<%= idNumber %></p>
+  <p>電話：<%= phone %></p>
+  <p>地址：<%= address %></p>
+  <p>業務員：<%= salesName %></p>
+
+  <h3>第三條（其他約定）</h3>
+  <p>旅客確認事項：<%= consentCheck %></p>
+  <p>自填勾選欄位：<%= customCheck %></p>
+  <p>其他填寫欄位：<%= customField %></p>
+
+  <h3>第四條（簽名）</h3>
+  <p>甲方簽名：</p>
+  <div>
+    <%- signatureImgTag %>
+  </div>
+</div>

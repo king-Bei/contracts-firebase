@@ -1,0 +1,52 @@
+<div class='contract'>
+    <h2>國際航空客票交易須知</h2>
+    <p>一、感謝您完成此次機票交易 (機票號碼：<%= flightNo %>)</p>
+    <p>出票日期：<%= createdAt %></p>
+    <p>旅客姓名 (甲方)：<%= travelerName %></p>
+    <p>旅行社/航空公司 (乙方)：<%= agentName %></p>
+    <p>票價：<%= ticketPrice %></p>
+    <p>航空公司：<%= airline %></p>
+  
+    <h3>1、使用期限</h3>
+    <p>有效期間：<%= validFrom %> 至 <%= validTo %>，必須於 <%= expiryDate %> 前使用完畢。</p>
+  
+    <h3>2、停留天數</h3>
+    <p>最短停留：<%= minStay %> 天 (依 <%= minStayType %> 計算)</p>
+    <p>最長停留：<%= maxStay %> 天</p>
+  
+    <h3>3、搭乘航班限制</h3>
+    <p>航段限制：<%= segmentLimit %></p>
+    <p>航班限制：<%= flightLimit %></p>
+    <p>出發航段限搭：<%= departureTimeLimit %></p>
+    <p>回程航段限搭：<%= returnTimeLimit %></p>
+    <p>其他限制：<%= otherLimit %></p>
+  
+    <h3>4、機票更改規則</h3>
+    <p>是否可更改：<%= changeAllowed %></p>
+    <p>更改手續費：<%= changeFee %></p>
+    <p>價差規定：<%= changePriceDiff %></p>
+  
+    <h3>5、退票規則</h3>
+    <p>是否可退票：<%= refundAllowed %></p>
+    <p>退票單位：<%= refundAgency %></p>
+    <p>退票原因：<%= refundReason %></p>
+    <p>退票手續費：<%= refundFee %></p>
+  
+    <h3>6、託運行李</h3>
+    <p>件數限制：<%= baggagePieces %></p>
+    <p>重量限制：<%= baggageWeight %></p>
+    <p>其他說明：<%= baggageOther %></p>
+  
+    <h3>7、其他事項</h3>
+    <p><%= otherNotes %></p>
+  
+    <h3>8、聯絡方式</h3>
+    <p><%= contactInfo %></p>
+  
+    <h3>9、簽名</h3>
+    <p>甲方簽名：</p>
+    <div>
+      <%- signatureImgTag %>
+    </div>
+  </div>
+  

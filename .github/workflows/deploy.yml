@@ -2,8 +2,7 @@ name: Deploy to Firebase
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   deploy:
@@ -25,25 +24,20 @@ jobs:
       - name: Install Firebase CLI
         run: npm i -g firebase-tools
 
-      # 安裝 Functions 依賴（會執行 postinstall 下載 Playwright chromium）
-      - name: Install functions dependencies
+      - name: Install functions dependencies (npm ci)
         working-directory: ./functions
         run: npm ci
 
-      # （可選）印出專案 ID，確認 workflow 使用的 project
       - name: Show Firebase target project
         env:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-        run: |
-          echo "Deploying to project: ${FIREBASE_PROJECT_ID}"
+        run: echo "Deploying to project: ${FIREBASE_PROJECT_ID}"
 
       - name: Deploy Hosting & Functions
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          # 下列可選：若你需要在部署期就用到服務帳戶（通常不需要）
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          # 其餘 Secrets（僅在需要的時候）
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
         run: |

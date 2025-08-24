@@ -133,4 +133,4 @@ app.post('/contracts/:id/pdf', requireAuth, requireRole('admin'), async (req, re
   }
 });
 
-module.exports = { api: app };
+module.exports = app;

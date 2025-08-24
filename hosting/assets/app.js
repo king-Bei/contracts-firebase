@@ -159,7 +159,7 @@ let auth, app;
     const ul = document.getElementById('list');
     ul.innerHTML = '';
     list.forEach(item => {
-      const link = (window.location.origin + `/sign/${item.id}`);
+      const link = item.signUrl || (window.location.origin + `/sign/${item.signToken || item.id}`);
       const li = document.createElement('li');
       li.innerHTML = `${new Date(item.createdAt).toISOString().slice(0,10)} · ${item.type} · ${item.travelerName} · <b>${item.status}</b> · <a href="${link}" target="_blank">簽署連結</a>`;
       ul.appendChild(li);

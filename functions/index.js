@@ -1,16 +1,7 @@
+const functions = require('firebase-functions');
 
 exports.api = require('./api').api;
 exports.web = require('./web').web;
-
-exports.api = functions
-  .runWith({ memory: '1GB', timeoutSeconds: 120 })
-  .https.onRequest(apiApp);
-
-exports.web = functions
-  .runWith({ memory: '1GB', timeoutSeconds: 120 })
-  .https.onRequest(webApp);
-
-const functions = require('firebase-functions');
 const { db, storage } = require('./src/admin');
 const { renderContractHtml, htmlToPdf, simpleContractPdf } = require('./src/services/pdfService');
 

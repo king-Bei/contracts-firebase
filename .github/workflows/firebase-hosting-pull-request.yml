@@ -44,3 +44,4 @@ jobs:
           expires: 7d
           firebaseToolsVersion: latest
           disableComment: false
+          force: false

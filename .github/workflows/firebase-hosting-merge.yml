@@ -23,7 +23,7 @@ jobs:
       - name: Install Firebase Tools
         run: npm i -g firebase-tools@latest
 
-        - name: Auth with Service Account
+      - name: Auth with Service Account
         run: |
           cat > $HOME/gcloud.json <<'JSON'
           ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}

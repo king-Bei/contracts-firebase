@@ -7,10 +7,10 @@
       "**/node_modules/**"
     ],
     "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
+      { "source": "/api/**", "function": "api" },
+      { "source": "/web/**", "function": "web" },
+      { "source": "/sign/**", "destination": "/sign.html" },
+      { "source": "**", "destination": "/login.html" }
     ]
   },
   "functions": {

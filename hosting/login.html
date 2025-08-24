@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"/>
+  <title>登入</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif; margin: 40px; }
+    input, button { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    button { cursor: pointer; }
+    div { margin-bottom: 10px; }
+  </style>
+  <script defer src="/assets/login.js"></script>
+</head>
+<body>
+  <h2>登入</h2>
+  <div>
+    <label>Email</label><br/>
+    <input id="email" placeholder="email" />
+  </div>
+  <div>
+    <label>Password</label><br/>
+    <input id="password" type="password" placeholder="password" />
+  </div>
+  <button id="loginBtn">登入</button>
+  <div id="error" style="color:red;margin-top:8px"></div>
+</body>
+</html>

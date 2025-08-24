@@ -11,6 +11,7 @@ async function createTemplate(data, ownerUid) {
     id,
     name: data.name || `untitled-${id.slice(-6)}`,
     body: data.body || '',
+    fields: Array.isArray(data.fields) ? data.fields : [],
     createdAt: now,
     updatedAt: now,
     ownerUid: ownerUid || null

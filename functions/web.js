@@ -1,6 +1,4 @@
 // v2 版 Cloud Functions（Node 20 / CommonJS）
-const { onRequest } = require('firebase-functions/v2/https');
-const { setGlobalOptions } = require('firebase-functions/v2/options');
 
 const express = require('express');
 const ejs = require('ejs');
@@ -87,13 +85,4 @@ app.post('/sign/:token/complete', async (req, res) => {
   }
 });
 
-// 匯出 v2 HTTP Function（含 secrets/timeout/memory 等選項）
-exports.web = onRequest(
-  {
-    // v2 可在此宣告要使用的 Secret Manager 祕密名稱
-    secrets: ['GOOGLE_SERVICE_ACCOUNT_JSON'],
-    timeoutSeconds: 540,
-    memory: '2GiB', // 注意是 GiB
-  },
-  (req, res) => app(req, res)
-);
+module.exports = app;

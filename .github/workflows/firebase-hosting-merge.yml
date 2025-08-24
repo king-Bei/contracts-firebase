@@ -26,7 +26,7 @@ jobs:
       - name: Auth with Service Account
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}' > $HOME/gcloud.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud.json" >> $GITHUB_ENV
+          echo "FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY=$HOME/gcloud.json" >> $GITHUB_ENV
 
       # 若你的 functions 需要先安裝依賴，取消註解以下兩步
       # - name: Install functions deps

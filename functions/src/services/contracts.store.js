@@ -46,9 +46,11 @@ async function updateDraft(id, patch) {
 
 async function sendForSign(id) {
   const ref = db.collection(COL).doc(id);
+  const token = nanoid();
   await ref.set({
-    status: 'pending',
-    sentAt: Date.now()
+    status: 'sent',
+    sentAt: Date.now(),
+    signToken: token
   }, { merge: true });
   const snap = await ref.get();
   return { id: snap.id, ...snap.data() };
@@ -83,6 +85,25 @@ async function completeById(id, signatureDataUrl) {
   return getById(id);
 }
 
+async function getByToken(token) {
+  const snap = await db.collection(COL).where('signToken', '==', token).limit(1).get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { id: doc.id, ...doc.data() };
+}
+
+async function recordConsentByToken(token, consentFields) {
+  const doc = await getByToken(token);
+  if (!doc) throw new Error('contract not found');
+  return recordConsentById(doc.id, consentFields);
+}
+
+async function completeByToken(token, signatureDataUrl) {
+  const doc = await getByToken(token);
+  if (!doc) throw new Error('contract not found');
+  return completeById(doc.id, signatureDataUrl);
+}
+
 module.exports = {
   createDraft,
   updateDraft,
@@ -90,5 +111,8 @@ module.exports = {
   getById,
   listContracts,
   recordConsentById,
-  completeById
+  completeById,
+  getByToken,
+  recordConsentByToken,
+  completeByToken
 };

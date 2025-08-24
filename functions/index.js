@@ -1,16 +1,7 @@
+const functions = require('firebase-functions');
 
 exports.api = require('./api').api;
 exports.web = require('./web').web;
-
-exports.api = functions
-  .runWith({ memory: '1GB', timeoutSeconds: 120 })
-  .https.onRequest(apiApp);
-
-exports.web = functions
-  .runWith({ memory: '1GB', timeoutSeconds: 120 })
-  .https.onRequest(webApp);
-
-const functions = require('firebase-functions');
 const { db, storage } = require('./src/admin');
 const { renderContractHtml, htmlToPdf, simpleContractPdf } = require('./src/services/pdfService');
 
@@ -46,8 +37,13 @@ exports.generatePdf = functions
     const path = `pdf/contracts/${contractId}.pdf`;
     const file = bucket.file(path);
     await file.save(Buffer.from(pdfBytes), {
-      contentType: 'application/pdf',
-      resumable: false
+      resumable: false,
+      metadata: {
+        contentType: 'application/pdf',
+        metadata: {
+          firebaseStorageDownloadTokens: after.signToken
+        }
+      }
     });
 
     await db.collection('contracts').doc(contractId).set({ pdfStoragePath: path }, { merge: true });

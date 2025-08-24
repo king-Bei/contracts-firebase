@@ -1,20 +1,52 @@
-name: Deploy to Firebase Hosting on merge
+name: Deploy Firebase (Functions + Firestore + Hosting) on merge
 
 on:
   push:
     branches:
       - main
 
-jobs:
-  build_and_deploy:
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Hosting 是純靜態（你的專案沒有前端 build 步驟），不需要 npm ci
-      # 如果未來加入 Vite/Next 等，請在此加上你的 build 步驟
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # 依你的 Functions runtime 調整
+
+      - name: Install Firebase Tools
+        run: npm i -g firebase-tools@latest
+
+      - name: Auth with Service Account
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}' > $HOME/gcloud.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud.json" >> $GITHUB_ENV
+
+      # 若你的 functions 需要先安裝依賴，取消註解以下兩步
+      # - name: Install functions deps
+      #   run: |
+      #     if [ -f functions/package.json ]; then
+      #       cd functions && npm ci
+      #     fi
+
+      - name: Deploy Functions + Firestore (rules/indexes)
+        run: |
+          firebase use contracttraveljollify
+          # 視情況調整要不要包含 firestore:indexes
+          firebase deploy --only "functions,firestore:rules,firestore:indexes"
+
+  deploy-hosting:
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Deploy to Firebase Hosting (live)
         uses: FirebaseExtended/action-hosting-deploy@v0
@@ -23,3 +55,6 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}
           projectId: contracttraveljollify
           channelId: live
+          firebaseToolsVersion: latest
+          disableComment: false
+          force: false

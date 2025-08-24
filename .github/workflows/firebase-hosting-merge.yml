@@ -31,11 +31,11 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud.json" >> $GITHUB_ENV
         
       # 若你的 functions 需要先安裝依賴，取消註解以下兩步
-      # - name: Install functions deps
-      #   run: |
-      #     if [ -f functions/package.json ]; then
-      #       cd functions && npm ci
-      #     fi
+      - name: Install functions deps
+        run: |
+             if [ -f functions/package.json ]; then
+             cd functions && npm ci
+             fi
 
       - name: Deploy Functions + Firestore (rules/indexes)
         run: |
@@ -50,13 +50,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to Firebase Hosting (live)
+      - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}
           projectId: contracttraveljollify
-          channelId: live
+          channelId: preview
           firebaseToolsVersion: latest
           disableComment: false
-          force: false
+          force: true

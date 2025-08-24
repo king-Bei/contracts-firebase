@@ -1,20 +1,68 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+    function hasRole(role) {
+      return isSignedIn() && request.auth.token.role == role;
+    }
+    function isSales() {
+      return hasRole("sales");
+    }
+
+    // ---------- users ----------
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.token.admin == true || request.auth.uid == userId);
-      allow create, update, delete: if request.auth.token.admin == true;
+      // 只有本人或 admin 可讀
+      allow get: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
+      // 不開放 list，避免列舉所有用戶
+      allow list: if false;
+
+      // 僅 admin 可寫（維持你原本設定）
+      allow create, update, delete: if isAdmin();
     }
+
+    // ---------- contracts ----------
     match /contracts/{contractId} {
-      allow create, update, read: if request.auth != null && request.auth.token.role == "sales";
-      // Publicly readable when sent, but writes require matching signToken
-      allow read: if request.auth == null && resource.data.status == "sent";
-      allow update: if request.auth == null &&
-                    resource.data.status == "sent" &&
-                    request.resource.data.signToken == resource.data.signToken;
+      // 銷售端（後台）可 CRUD（讀包含 get/list）
+      allow create, update, delete, get, list: if isSales();
+
+      // ========== 公開讀取（給未登入客戶查看合約） ==========
+      // 只允許 get，不允許 list（避免被抓整個清單）
+      allow get: if !isSignedIn() && resource.data.status == "sent";
+
+      // ========== 公開簽署（未登入者） ==========
+      // 僅允許從 sent → signed，且只能改極少數欄位
+      allow update: if !isSignedIn()
+                    && resource.data.status == "sent"
+                    && request.resource.data.status == "signed"
+                    // signToken 必須相同且不可被改
+                    && request.resource.data.signToken == resource.data.signToken
+                    // 僅允許改動這些欄位（依你的前端實際命名調整）
+                    && request.resource.data.diff(resource.data).changedKeys()
+                         .hasOnly(["status", "signedAt", "signature"])
+                    // 避免把關鍵金額/內容竄改：這些欄位不能變
+                    && !request.resource.data.diff(resource.data).changedKeys()
+                         .hasAny(["items", "price", "total", "buyer", "seller", "title", "terms"]);
+
+      // 其它所有未登入的 read（例如 list）一律拒絕
+      allow list: if false;
     }
+
+    // ---------- templates ----------
     match /templates/{templateId} {
-      allow create, update, read: if request.auth != null && request.auth.token.role == "sales";
+      // 僅銷售端可讀寫（含 list）
+      allow get, list, create, update, delete: if isSales();
+    }
+
+    // 預設拒絕
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

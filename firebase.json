@@ -13,7 +13,12 @@
       { "source": "**", "destination": "/login.html" }
     ]
   },
-  "functions": { "source": "functions" },
+  "functions": {
+    "source": "functions",
+    "predeploy": [
+    "npm --prefix \"$RESOURCE_DIR\" ci || npm --prefix \"$RESOURCE_DIR\" i"
+    ]
+    },
   "firestore": { "rules": "firestore.rules" },
   "storage": { "rules": "storage.rules" }
 }

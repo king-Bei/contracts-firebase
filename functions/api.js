@@ -93,7 +93,8 @@ app.get('/contracts', requireAuth, requireRole('sales'), async (req, res) => {
 app.post('/contracts/:id/send', requireAuth, requireRole('sales'), async (req, res) => {
   const sent = await sendForSign(req.params.id);
   const base = process.env.PUBLIC_BASE_URL;
-  const signUrl = base ? `${base}/sign/${sent.id}` : `/sign/${sent.id}`;
+  const token = sent.signToken;
+  const signUrl = base ? `${base}/sign/${token}` : `/sign/${token}`;
   res.json({ ...sent, signUrl });
 });
 

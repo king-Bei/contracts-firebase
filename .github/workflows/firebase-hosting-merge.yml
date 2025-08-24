@@ -18,25 +18,22 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # 依你的 Functions runtime 調整
+          node-version: '20'
+
+      - name: Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}
 
       - name: Install Firebase Tools
         run: npm i -g firebase-tools@latest
 
-      - name: Auth with Service Account
-        run: |
-          cat > $HOME/gcloud.json <<'JSON'
-          ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}
-          JSON
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud.json" >> $GITHUB_ENV
-        
-      # 若你的 functions 需要先安裝依賴，取消註解以下兩步
       - name: Install functions deps
         working-directory: functions
         run: |
-             if [ -f functions/package.json ]; then
-             cd functions && npm ci
-             fi
+          if [ -f package.json ]; then
+            npm ci
+          fi
 
       - name: Deploy Functions + Firestore (rules/indexes)
         run: |
@@ -56,7 +53,7 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CONTRACTTRAVELJOLLIFY }}
           projectId: contracttraveljollify
-          channelId: preview
+          channelId: live           # ← 如果要正式站
           firebaseToolsVersion: latest
           disableComment: false
           force: true

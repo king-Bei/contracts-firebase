@@ -13,13 +13,7 @@
       { "source": "**", "destination": "/login.html" }
     ]
   },
-  "functions": {
-    "source": "functions"
-  },
-  "firestore": {
-    "rules": "firestore.rules"
-  },
-  "storage": {
-    "rules": "storage.rules"
-  }
+  "functions": { "source": "functions" },
+  "firestore": { "rules": "firestore.rules" },
+  "storage": { "rules": "storage.rules" }
 }

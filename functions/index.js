@@ -6,8 +6,8 @@ const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const logger = require('firebase-functions/logger');
 
 // --- 你原本的模組 ---
-const apiApp = require('./api').api;   // 假設 ./api 匯出的是一個 express app 或 handler
-const webApp = require('./web').web;   // 假設 ./web 匯出的是一個 express app 或 handler
+const apiApp = require('./api');   // 假設 ./api 匯出的是一個 express app 或 handler
+const webApp = require('./web');   // 假設 ./web 匯出的是一個 express app 或 handler
 
 const { db, storage } = require('./src/admin');
 const { renderContractHtml, htmlToPdf, simpleContractPdf } = require('./src/services/pdfService');

@@ -40,7 +40,6 @@ jobs:
       - name: Deploy Functions + Firestore (rules/indexes)
         run: |
           firebase use contracttraveljollify
-          # 視情況調整要不要包含 firestore:indexes
           firebase deploy --only "functions,firestore:rules,firestore:indexes"
 
   deploy-hosting:

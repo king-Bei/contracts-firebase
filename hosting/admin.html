@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"/>
+  <title>管理者後台</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif; margin: 0; }
+    header { padding: 16px; background: #0f172a; color: #fff; display:flex; justify-content:space-between; align-items:center; }
+    main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+    .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 12px 0; }
+    input, button, select, textarea { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; width: 100%; }
+    button { cursor: pointer; width: auto; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .hidden { display: none; }
+    ul { padding-left: 20px; }
+    textarea { min-height: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    nav button { margin-right: 8px; }
+  </style>
+  <script defer src="/assets/dashboard.js"></script>
+</head>
+<body>
+  <header><strong>合約系統 · 管理者</strong><span id="me"></span><button id="logoutBtn">登出</button></header>
+  <main>
+    <div class="card">
+      <h3>功能選單</h3>
+      <nav>
+        <button data-view="admin">AdminDashboard</button>
+        <button data-view="templates">TemplateManager</button>
+        <button data-view="send">SendContract</button>
+        <button data-view="list">ContractList</button>
+      </nav>
+    </div>
+
+    <div id="view-admin" class="card hidden">
+      <h3>AdminDashboard：建立業務人員帳號</h3>
+      <div class="row">
+        <div><label>業務 Email</label><input id="salesEmail" placeholder="sales@example.com"></div>
+        <div><label>初始密碼</label><input id="salesPassword" type="password" placeholder="Min 6 chars"></div>
+      </div>
+      <div><label>顯示名稱</label><input id="salesDisplayName" placeholder="王小明"></div>
+      <div style="margin-top:10px"><button id="createSalesBtn">建立 Sales 帳號</button></div>
+      <pre><code id="adminOut"></code></pre>
+    </div>
+
+    <div id="view-templates" class="card hidden">
+      <h3>TemplateManager：建立合約範本</h3>
+      <div><label>範本名稱</label><input id="tplName" placeholder="團體旅遊契約 v1"></div>
+      <div><label>欄位（以逗號分隔）</label><input id="tplFields" placeholder="travelerName,agentName,idNumber"></div>
+      <div><label>EJS 內容（可使用變數：travelerName, agentName, createdAt, idNumber, phone, address, salesName, signatureImgTag ...）</label>
+        <textarea id="tplBody"></textarea>
+      </div>
+      <div style="margin-top:10px"><button id="createTplBtn">建立範本</button></div>
+      <h4>我的範本清單</h4>
+      <ul id="tplList"></ul>
+    </div>
+
+    <div id="view-send" class="card hidden">
+      <h3>SendContract：選擇範本 + 客戶 Email → 建立合約</h3>
+      <div class="row">
+        <div>
+          <label>範本</label>
+          <select id="tplSelect"></select>
+        </div>
+        <div>
+          <label>客戶 Email</label>
+          <input id="customerEmail" placeholder="customer@example.com">
+        </div>
+      </div>
+      <div id="dynamicFields" class="row"></div>
+      <div style="margin-top:10px"><button id="createContractBtn">建立合約紀錄（草稿）</button></div>
+      <div style="margin-top:10px"><button id="sendContractBtn">出簽署（產生連結）</button></div>
+      <pre><code id="sendOut"></code></pre>
+    </div>
+
+    <div id="view-list" class="card hidden">
+      <h3>ContractList：我的合約</h3>
+      <button id="refreshList">重新整理</button>
+      <ul id="list"></ul>
+    </div>
+  </main>
+</body>
+</html>

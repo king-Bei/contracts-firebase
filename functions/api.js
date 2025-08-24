@@ -1,4 +1,6 @@
-const functions = require('firebase-functions');
+// functions/api.js
+// 只輸出 Express App，Firebase 包裝改由 v2 的 index.js onRequest 處理
+
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
@@ -33,7 +35,7 @@ async function requireAuth(req, res, next) {
 
 // Role check: admin or sales via custom claims
 function hasRole(user, role) {
-  return user?.role === role || user?.admin === true || (user?.roles||[]).includes(role);
+  return user?.role === role || user?.admin === true || (user?.roles || []).includes(role);
 }
 function requireRole(role) {
   return (req, res, next) => {
@@ -131,6 +133,4 @@ app.post('/contracts/:id/pdf', requireAuth, requireRole('admin'), async (req, re
   }
 });
 
-exports.api = functions
-  .runWith({ secrets: ['DRIVE_FOLDER_ID', 'PUBLIC_BASE_URL', 'GOOGLE_SERVICE_ACCOUNT_JSON'] })
-  .https.onRequest(app);
+module.exports = { api: app };

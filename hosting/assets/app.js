@@ -1,5 +1,5 @@
 // Minimal front-end helper for Firebase Auth and calling Functions
-let auth, app;
+let auth, app, currentUser, currentClaims = {}, templatesMap = {};
 (async () => {
   // === 🔧 已套入你的 Firebase Web App 設定 ===
   const config = {
@@ -52,9 +52,12 @@ let auth, app;
   };
 
   document.getElementById('createTplBtn').onclick = async () => {
+    const fields = document.getElementById('tplFields').value
+      .split(',').map(s => s.trim()).filter(Boolean);
     const payload = {
       name: document.getElementById('tplName').value,
-      body: document.getElementById('tplBody').value
+      body: document.getElementById('tplBody').value,
+      fields
     };
     const res = await api('/templates', 'POST', payload);
     await loadTemplates();
@@ -80,9 +83,14 @@ let auth, app;
     currentUser = u;
     document.getElementById('me').textContent = u ? `已登入：${u.email}` : '未登入';
     if (u) {
+      const tokenResult = await u.getIdTokenResult();
+      currentClaims = tokenResult.claims || {};
+      updateNav();
       await loadTemplates();
       await loadList();
     } else {
+      currentClaims = {};
+      updateNav();
       clearList();
       clearTemplates();
     }
@@ -119,13 +127,16 @@ let auth, app;
 
   async function loadTemplates() {
     const list = await api('/templates');
+    templatesMap = {};
     const ul = document.getElementById('tplList');
     ul.innerHTML = '';
     const sel = document.getElementById('tplSelect');
     sel.innerHTML = '';
     list.forEach(t => {
+      templatesMap[t.id] = t;
       const li = document.createElement('li');
-      li.textContent = `${t.name} (${t.id})`;
+      const fieldsStr = (t.fields || []).join(',');
+      li.textContent = `${t.name} (${t.id})${fieldsStr ? ' ['+fieldsStr+']' : ''}`;
       ul.appendChild(li);
 
       const opt = document.createElement('option');
@@ -133,25 +144,62 @@ let auth, app;
       opt.textContent = t.name;
       sel.appendChild(opt);
     });
+    renderFields();
   }
 
   function clearTemplates() {
     document.getElementById('tplList').innerHTML = '';
     document.getElementById('tplSelect').innerHTML = '';
+    document.getElementById('dynamicFields').innerHTML = '';
   }
 
   function collectContractForm() {
+    const payload = {};
+    document.querySelectorAll('#dynamicFields [data-field]').forEach(input => {
+      payload[input.dataset.field] = input.value;
+    });
     return {
       templateId: document.getElementById('tplSelect').value,
       customerEmail: document.getElementById('customerEmail').value,
-      travelerName: document.getElementById('travelerName').value,
-      agentName: document.getElementById('agentName').value,
-      idNumber: document.getElementById('idNumber').value,
-      phone: document.getElementById('phone').value,
-      address: document.getElementById('address').value,
-      salesName: document.getElementById('salesName').value,
+      travelerName: payload.travelerName || '',
+      agentName: payload.agentName || '',
+      idNumber: payload.idNumber || '',
+      phone: payload.phone || '',
+      address: payload.address || '',
+      salesName: payload.salesName || '',
+      payload,
       type: 'group'
     };
+  }
+
+  function renderFields() {
+    const id = document.getElementById('tplSelect').value;
+    const tpl = templatesMap[id] || {};
+    const container = document.getElementById('dynamicFields');
+    container.innerHTML = '';
+    (tpl.fields || []).forEach(f => {
+      const div = document.createElement('div');
+      const label = document.createElement('label');
+      label.textContent = f;
+      const input = document.createElement('input');
+      input.dataset.field = f;
+      div.appendChild(label);
+      div.appendChild(input);
+      container.appendChild(div);
+    });
+  }
+
+  document.getElementById('tplSelect').addEventListener('change', renderFields);
+
+  function updateNav() {
+    const isAdmin = currentClaims.admin === true;
+    const isSales = currentClaims.role === 'sales' || isAdmin;
+    const adminBtn = document.querySelector('nav button[data-view="admin"]');
+    if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-block' : 'none';
+    ['templates','send','list'].forEach(v => {
+      const btn = document.querySelector(`nav button[data-view="${v}"]`);
+      if (btn) btn.style.display = isSales ? 'inline-block' : 'none';
+    });
   }
 
   async function loadList() {

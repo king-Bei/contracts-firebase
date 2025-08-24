@@ -66,6 +66,7 @@
     <div id="view-templates" class="card hidden">
       <h3>TemplateManager：建立合約範本</h3>
       <div><label>範本名稱</label><input id="tplName" placeholder="團體旅遊契約 v1"></div>
+      <div><label>欄位（以逗號分隔）</label><input id="tplFields" placeholder="travelerName,agentName,idNumber"></div>
       <div><label>EJS 內容（可使用變數：travelerName, agentName, createdAt, idNumber, phone, address, salesName, signatureImgTag ...）</label>
         <textarea id="tplBody"></textarea>
       </div>
@@ -86,14 +87,7 @@
           <input id="customerEmail" placeholder="customer@example.com">
         </div>
       </div>
-      <div class="row">
-        <div><label>旅客姓名</label><input id="travelerName"></div>
-        <div><label>旅行社名稱</label><input id="agentName" value="鑫囍探索旅行社"></div>
-        <div><label>身分證號</label><input id="idNumber"></div>
-        <div><label>電話</label><input id="phone"></div>
-        <div><label>地址</label><input id="address"></div>
-        <div><label>業務員姓名</label><input id="salesName"></div>
-      </div>
+      <div id="dynamicFields" class="row"></div>
       <div style="margin-top:10px"><button id="createContractBtn">建立合約紀錄（草稿）</button></div>
       <div style="margin-top:10px"><button id="sendContractBtn">送出簽署（產生連結）</button></div>
       <pre><code id="sendOut"></code></pre>

@@ -27,17 +27,28 @@ let auth, app;
   auth = firebase.auth();
 
   const loginBtn = document.getElementById('loginBtn');
-  loginBtn.onclick = async () => {
+  const loginForm = document.getElementById('loginForm');
+  const errorBox = document.getElementById('error');
+
+  async function doLogin(evt) {
+    evt && evt.preventDefault();
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
+    if (!email || !password) return;
+    loginBtn.disabled = true;
+    errorBox.textContent = '';
     try {
       await auth.signInWithEmailAndPassword(email, password);
       await redirectByRole();
     } catch (e) {
-      const err = document.getElementById('error');
-      if (err) err.textContent = e.message;
+      errorBox.textContent = e.message;
+    } finally {
+      loginBtn.disabled = false;
     }
-  };
+  }
+
+  loginBtn.onclick = doLogin;
+  if (loginForm) loginForm.onsubmit = doLogin;
 
   auth.onAuthStateChanged(async (u) => {
     if (u) await redirectByRole();

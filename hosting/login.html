@@ -2,27 +2,51 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8"/>
-  <title>登入</title>
+  <title>合約系統登入</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <style>
-    body { font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif; margin: 40px; }
-    input, button { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
-    button { cursor: pointer; }
-    div { margin-bottom: 10px; }
-  </style>
+  <link rel="stylesheet" href="/assets/login.css" />
   <script defer src="/assets/login.js"></script>
 </head>
 <body>
-  <h2>登入</h2>
-  <div>
-    <label>Email</label><br/>
-    <input id="email" placeholder="email" />
-  </div>
-  <div>
-    <label>Password</label><br/>
-    <input id="password" type="password" placeholder="password" />
-  </div>
-  <button id="loginBtn">登入</button>
-  <div id="error" style="color:red;margin-top:8px"></div>
+  <main class="card">
+    <section class="side">
+      <div class="badge">合約系統 · Firebase</div>
+      <h1>登入以管理範本、出送合約</h1>
+      <p>管理者與業務帳號皆可在此登入。登入後系統會依照權限導向管理者或業務介面。</p>
+      <div class="helper">
+        <strong>預設管理者</strong><br/>
+        帳號：jollityadmin@example.com<br/>
+        密碼：00116098
+      </div>
+      <div class="tag-row">
+        <span class="tag">模板設定</span>
+        <span class="tag">合約送簽</span>
+        <span class="tag">簽署進度</span>
+      </div>
+      <p class="footer">若尚未建立帳號，請先使用管理者登入後建立業務員。</p>
+    </section>
+
+    <section class="content">
+      <div class="header">
+        <div>
+          <h2>登入</h2>
+          <div class="muted">請輸入帳號與密碼</div>
+        </div>
+      </div>
+
+      <form id="loginForm" class="form">
+        <div>
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="you@example.com" required />
+        </div>
+        <div>
+          <label for="password">密碼</label>
+          <input id="password" type="password" placeholder="請輸入密碼" required />
+        </div>
+        <button id="loginBtn" type="submit">登入</button>
+        <div id="error"></div>
+      </form>
+    </section>
+  </main>
 </body>
 </html>

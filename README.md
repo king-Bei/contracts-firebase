@@ -17,6 +17,10 @@ cd ..
 firebase deploy
 ```
 
+## 本地測試（Firebase 架構）
+
+- `cd functions && npm test`：透過模擬的 Firestore 資料層驗證模板/合約的 CRUD、送簽與簽署流程，確保核心邏輯可在 Functions 上直接運作。
+
 ## 需要的環境變數 / 設定
 
 - 若你要使用 Google Drive 上傳 PDF：
@@ -34,6 +38,7 @@ firebase deploy
 - `PATCH /api/contracts/:id`：更新草稿
 - `POST /api/contracts/:id/send`：發送簽署，回傳簽署連結
 - `POST /api/contracts/:id/pdf`：上傳 PDF 到 Google Drive（需 admin）
+- `POST /api/admin/bootstrap`：以 `x-bootstrap-secret` + `BOOTSTRAP_SECRET` 建立預設管理員（帳號 jollityadmin / 密碼 00116098，可用環境變數覆寫），並賦予 admin 角色
 
 - `GET /sign/:token`：以 EJS 套版，輸出簽署頁 HTML
 - `POST /sign/:token/consent`：旅客勾選同意欄

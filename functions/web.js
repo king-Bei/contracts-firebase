@@ -4,12 +4,15 @@ const express = require('express');
 const ejs = require('ejs');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+const { setGlobalOptions } = require('firebase-functions/v2/options');
 
 const {
   getByToken,
   recordConsentByToken,
   completeByToken,
 } = require('./src/services/contracts.store');
+const { getTemplate } = require('./src/services/templates.store');
+const { renderTemplateToHtml } = require('./src/services/templateRenderer');
 
 // 設定全域預設（建議放你專案的主要區域）
 setGlobalOptions({ region: 'asia-east1' });
@@ -26,30 +29,36 @@ app.get('/sign/:token', async (req, res) => {
     const doc = await getByToken(token);
     if (!doc) return res.status(404).send('Link expired or invalid');
 
-    const tpl =
-      doc.type === 'individual'
-        ? 'tpl_individual.ejs'
-        : doc.type === 'flight'
-        ? 'tpl_flight.ejs'
-        : 'tpl_group.ejs';
+    let html;
+    if (doc.templateId) {
+      const tplDoc = await getTemplate(doc.templateId);
+      html = await renderTemplateToHtml(tplDoc?.body || '', doc);
+    } else {
+      const tpl =
+        doc.type === 'individual'
+          ? 'tpl_individual.ejs'
+          : doc.type === 'flight'
+          ? 'tpl_flight.ejs'
+          : 'tpl_group.ejs';
 
-    const templatePath = path.join(__dirname, 'views', tpl);
+      const templatePath = path.join(__dirname, 'views', tpl);
 
-    const model = {
-      travelerName: doc.travelerName,
-      agentName: doc.agentName,
-      createdAt: new Date(doc.createdAt).toISOString().split('T')[0],
-      idNumber: doc.idNumber,
-      phone: doc.phone,
-      address: doc.address,
-      salesName: doc.salesName,
-      signatureImgTag: doc.signatureDataUrl
-        ? `<img src="${doc.signatureDataUrl}" style="max-width:300px">`
-        : '',
-      ...(doc.payload || {}),
-    };
+      const model = {
+        travelerName: doc.travelerName,
+        agentName: doc.agentName,
+        createdAt: new Date(doc.createdAt).toISOString().split('T')[0],
+        idNumber: doc.idNumber,
+        phone: doc.phone,
+        address: doc.address,
+        salesName: doc.salesName,
+        signatureImgTag: doc.signatureDataUrl
+          ? `<img src="${doc.signatureDataUrl}" style="max-width:300px">`
+          : '',
+        ...(doc.payload || {}),
+      };
 
-    const html = await ejs.renderFile(templatePath, model, { async: true });
+      html = await ejs.renderFile(templatePath, model, { async: true });
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
   } catch (e) {

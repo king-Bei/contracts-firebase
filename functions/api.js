@@ -12,6 +12,7 @@ const {
   createTemplate, updateTemplate, getTemplate, listTemplates
 } = require('./src/services/templates.store');
 const { uploadPDF } = require('./src/services/driveService');
+const { extractVariables, renderTemplateToHtml } = require('./src/services/templateRenderer');
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -48,6 +49,37 @@ function requireRole(role) {
 app.get('/healthz', (_req, res) => res.send('ok'));
 
 /** ===================== Admin ===================== */
+// Bootstrap default admin for fresh environments (protected by BOOTSTRAP_SECRET)
+app.post('/admin/bootstrap', async (req, res) => {
+  const headerSecret = req.headers['x-bootstrap-secret'];
+  const secret = process.env.BOOTSTRAP_SECRET;
+  if (!secret) return res.status(500).json({ error: 'BOOTSTRAP_SECRET not set' });
+  if (headerSecret !== secret) return res.status(403).json({ error: 'forbidden' });
+
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL || 'jollityadmin@example.com';
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD || '00116098';
+  const displayName = process.env.BOOTSTRAP_ADMIN_NAME || 'jollityadmin';
+  const employeeNo = process.env.BOOTSTRAP_ADMIN_EMPLOYEE || '00116098';
+
+  let user = null;
+  try {
+    user = await admin.auth().getUserByEmail(email);
+    user = await admin.auth().updateUser(user.uid, { displayName, password });
+  } catch (e) {
+    if (e.code === 'auth/user-not-found') {
+      user = await admin.auth().createUser({ email, password, displayName });
+    } else {
+      console.error('bootstrap error', e);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  const claims = { ...(user.customClaims || {}), admin: true, role: 'admin', employeeNo };
+  await admin.auth().setCustomUserClaims(user.uid, claims);
+
+  res.json({ ok: true, uid: user.uid, email, displayName, claims });
+});
+
 // 建立業務人員帳號，並設置 custom claims: role=sales
 app.post('/admin/createSalesUser', requireAuth, requireRole('admin'), async (req, res) => {
   const { email, password, displayName } = req.body || {};
@@ -77,6 +109,13 @@ app.get('/templates/:id', requireAuth, requireRole('sales'), async (req, res) =>
 app.patch('/templates/:id', requireAuth, requireRole('sales'), async (req, res) => {
   const t = await updateTemplate(req.params.id, req.body || {});
   res.json(t);
+});
+
+app.post('/templates/preview', requireAuth, requireRole('sales'), async (req, res) => {
+  const { body, contract } = req.body || {};
+  if (typeof body !== 'string') return res.status(400).json({ error: 'body required' });
+  const html = await renderTemplateToHtml(body, contract || {});
+  res.json({ fields: extractVariables(body), html });
 });
 
 /** ===================== Contracts ===================== */

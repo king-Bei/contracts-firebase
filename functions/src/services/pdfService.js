@@ -1,7 +1,7 @@
 const { PDFDocument, StandardFonts } = require('pdf-lib');
 let chromium = null;
 try { chromium = require('playwright').chromium; } catch (e) { chromium = null; }
-const ejs = require('ejs');
+const { renderTemplateToHtml, buildModel } = require('./templateRenderer');
 
 async function simpleContractPdf(contract) {
   const pdfDoc = await PDFDocument.create();
@@ -21,27 +21,8 @@ async function simpleContractPdf(contract) {
 }
 
 async function renderContractHtml(contract, templateBody) {
-  const model = {
-    travelerName: contract.travelerName,
-    agentName: contract.agentName,
-    createdAt: new Date(contract.createdAt).toISOString().split('T')[0],
-    idNumber: contract.idNumber,
-    phone: contract.phone,
-    address: contract.address,
-    salesName: contract.salesName,
-    signatureImgTag: contract.signatureDataUrl ? `<img src="${contract.signatureDataUrl}" style="max-width:300px">` : '',
-    ...(contract.payload || {})
-  };
-  const html = await ejs.render(templateBody || '', model, { async: true });
-  return `<!doctype html>
-<html><head><meta charset="utf-8">
-<style>
-  @page { size: A4; margin: 20mm 12mm 20mm 12mm; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", Arial, "PingFang TC", "Heiti TC", sans-serif; font-size: 12pt; color: #111; }
-  h1,h2,h3 { margin: 0 0 8px 0; }
-  .page-break { page-break-before: always; }
-</style>
-</head><body>${html}</body></html>`;
+  const model = buildModel(contract);
+  return renderTemplateToHtml(templateBody || '', model);
 }
 
 async function htmlToPdf(html, opts={}) {

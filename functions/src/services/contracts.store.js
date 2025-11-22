@@ -14,7 +14,7 @@ function toTypeCode(x) {
 
 async function createDraft(data, ownerUid) {
   const id = nanoid();
-  const now = Date.now();
+  const now = data.createdAt || Date.now();
 
   const doc = {
     id,

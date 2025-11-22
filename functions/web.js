@@ -4,6 +4,7 @@ const express = require('express');
 const ejs = require('ejs');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+const { setGlobalOptions } = require('firebase-functions/v2/options');
 
 const {
   getByToken,

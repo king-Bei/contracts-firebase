@@ -26,6 +26,11 @@ async function createContractTemplatesTable() {
   }
 }
 
+async function findAll() {
+  const { rows } = await db.query('SELECT * FROM contract_templates ORDER BY created_at DESC');
+  return rows;
+}
+
 /**
  * 建立新合約範本。
  * @param {object} templateData - 包含 name, content, variables 的物件。
@@ -82,11 +87,24 @@ async function update(id, { name, content, variables, is_active }) {
   return rows[0] || null;
 }
 
+async function setActive(id, isActive) {
+  const queryText = `
+    UPDATE contract_templates
+    SET is_active = $1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2
+    RETURNING *;
+  `;
+  const { rows } = await db.query(queryText, [isActive, id]);
+  return rows[0] || null;
+}
+
 
 module.exports = {
   createContractTemplatesTable,
+  findAll,
   create,
   findAllActive,
   findById,
   update,
+  setActive,
 };

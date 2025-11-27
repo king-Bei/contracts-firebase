@@ -1,91 +1,110 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="UTF-8">
-    <title><%= title %></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .contract-preview {
-            border: 1px solid #ccc;
-            padding: 20px;
-            background-color: #f8f9fa;
-            white-space: pre-wrap; /* 保留換行與空白 */
-            font-family: monospace;
-        }
-    </style>
-</head>
-<body>
-    <%- include('../partials/navbar', { user: user }) %>
+<%- include('../partials/header') %>
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1">合約詳情</h1>
+    <p class="text-muted mb-0">合約 ID：<%= contract.id %></p>
+  </div>
+  <div>
+    <a href="/sales" class="btn btn-outline-secondary">返回列表</a>
+  </div>
+</div>
 
-    <div class="container mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h1>合約詳情</h1>
-            <a href="/sales/dashboard" class="btn btn-secondary">返回儀表板</a>
-        </div>
-
-        <!-- 顯示簽署連結與驗證碼的區塊 -->
-        <% if (contract.status === 'PENDING_SIGNATURE' || contract.status === 'SIGNED') { %>
-            <div class="alert alert-info">
-                <h5>簽署資訊</h5>
-                <p><strong>簽署連結:</strong> 
-                    <input type="text" readonly class="form-control" value="<%= `${req.protocol}://${req.get('host')}/sign/${contract.signing_token}` %>">
-                </p>
-                <% if (plainVerificationCode) { %>
-                    <div class="alert alert-success">
-                        <p class="mb-0"><strong>客戶驗證碼:</strong> <kbd><%= plainVerificationCode %></kbd></p>
-                        <small>請將以上連結與驗證碼提供給客戶。驗證碼只會顯示這一次，請妥善記錄。</small>
-                    </div>
-                <% } %>
-            </div>
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">
+        <strong>合約資訊</strong>
+      </div>
+      <div class="card-body">
+        <p class="mb-2"><strong>客戶名稱：</strong><%= contract.client_name || '-' %></p>
+        <p class="mb-2"><strong>範本：</strong><%= contract.template_name %></p>
+        <p class="mb-2"><strong>狀態：</strong>
+          <% if (contract.status === 'SIGNED') { %>
+            <span class="badge bg-success">已簽署</span>
+          <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
+            <span class="badge bg-warning text-dark">待簽署</span>
+          <% } else { %>
+            <span class="badge bg-secondary"><%= contract.status %></span>
+          <% } %>
+        </p>
+        <p class="mb-2"><strong>建立時間：</strong><%= new Date(contract.created_at).toLocaleString() %></p>
+        <% if (contract.signed_at) { %>
+          <p class="mb-0"><strong>簽署時間：</strong><%= new Date(contract.signed_at).toLocaleString() %></p>
         <% } %>
-
-        <div class="card mb-4">
-            <div class="card-header">
-                合約資訊
-            </div>
-            <div class="card-body">
-                <p><strong>合約 ID:</strong> <%= contract.id %></p>
-                <p><strong>客戶名稱:</strong> <%= contract.customer_name %></p>
-                <p><strong>客戶 Email:</strong> <%= contract.customer_email %></p>
-                <p><strong>狀態:</strong> 
-                    <% if (contract.status === 'SIGNED') { %>
-                        <span class="badge bg-success">已簽署</span>
-                    <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
-                        <span class="badge bg-warning text-dark">待簽署</span>
-                    <% } else if (contract.status === 'DRAFT') { %>
-                        <span class="badge bg-secondary">草稿</span>
-                    <% } else { %>
-                        <span class="badge bg-light text-dark"><%= contract.status %></span>
-                    <% } %>
-                </p>
-                <p><strong>建立時間:</strong> <%= new Date(contract.created_at).toLocaleString() %></p>
-                <% if (contract.signed_at) { %>
-                    <p><strong>簽署時間:</strong> <%= new Date(contract.signed_at).toLocaleString() %></p>
-                <% } %>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>合約內容預覽</span>
-                <!-- 只有在草稿狀態下才顯示操作按鈕 -->
-                <% if (contract.status === 'DRAFT') { %>
-                    <div>
-                        <a href="/sales/contracts/<%= contract.id %>/edit" class="btn btn-warning btn-sm">編輯</a>
-                        <form action="/sales/contracts/<%= contract.id %>/generate-link" method="POST" onsubmit="return confirm('您確定要產生簽署連結嗎？產生後合約內容將無法修改。');" class="d-inline">
-                            <button type="submit" class="btn btn-success btn-sm">產生簽署連結</button>
-                        </form>
-                    </div>
-                <% } %>
-            </div>
-            <div class="card-body">
-                <div class="contract-preview">
-                    <%- previewContent %>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>簽署資訊</strong>
+      </div>
+      <div class="card-body">
+        <p class="mb-2">請將以下連結與驗證碼提供給客戶。</p>
+        <div class="mb-3">
+          <label class="form-label">簽署短連結</label>
+          <div class="input-group mb-2">
+            <input type="text" readonly class="form-control" id="short-share-link" value="<%= shortShareLink %>">
+            <button class="btn btn-outline-primary" type="button" id="copy-short-share-link">複製</button>
+          </div>
+          <div class="form-text">如需完整網址，可使用：<code><%= shareLink %></code></div>
+        </div>
+        <div class="alert alert-success" role="alert">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <strong>客戶驗證碼：</strong> <kbd><%= plaintextCode || 'N/A' %></kbd>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="copy-code" <%= plaintextCode ? '' : 'disabled' %>>
+              複製驗證碼
+            </button>
+          </div>
+          <div class="small text-muted mt-2">驗證碼將同步顯示於此頁，方便業務員再次確認。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>合約內容預覽</strong>
+      </div>
+      <div class="card-body">
+        <div class="border rounded p-3 bg-light" style="min-height: 240px; white-space: pre-wrap;">
+          <%- previewContent %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
+
+<script>
+  const copyShortLinkBtn = document.getElementById('copy-short-share-link');
+  const copyCodeBtn = document.getElementById('copy-code');
+
+  if (copyShortLinkBtn) {
+    copyShortLinkBtn.addEventListener('click', async () => {
+      const linkInput = document.getElementById('short-share-link');
+      try {
+        await navigator.clipboard.writeText(linkInput.value);
+        copyShortLinkBtn.textContent = '已複製';
+        setTimeout(() => copyShortLinkBtn.textContent = '複製', 1500);
+      } catch (e) {
+        alert('無法複製，請手動選取文字。');
+      }
+    });
+  }
+
+  if (copyCodeBtn) {
+    copyCodeBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText('<%= plaintextCode || "" %>');
+        copyCodeBtn.textContent = '已複製';
+        setTimeout(() => copyCodeBtn.textContent = '複製驗證碼', 1500);
+      } catch (e) {
+        alert('無法複製，請手動選取驗證碼。');
+      }
+    });
+  }
+</script>

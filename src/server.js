@@ -425,7 +425,7 @@ app.get('/sales/contracts/:id/edit', checkAuth, async (req, res) => {
   }
 
   try {
-    const contract = await contractModel.findById(req.params.id);
+    let contract = await contractModel.findById(req.params.id);
     if (!contract) {
       return res.status(404).send('找不到合約');
     }
@@ -607,12 +607,17 @@ app.get('/sales/contracts/:id', checkAuth, async (req, res) => {
       return res.status(403).send('您無權查看此合約');
     }
 
+    if (!contract.short_link_code) {
+      const shortCode = await contractModel.ensureShortLinkCode(contract.id);
+      contract = { ...contract, short_link_code: shortCode };
+    }
+
     const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values);
     const plaintextCode = contract.verification_code_plaintext || req.session.lastGeneratedCode || null;
     delete req.session.lastGeneratedCode;
 
     const fullShareLink = `${req.protocol}://${req.get('host')}/contracts/sign/${contract.signing_link_token}`;
-    const shortShareLink = `${req.protocol}://${req.get('host')}/s/${contract.signing_link_token}`;
+    const shortShareLink = `${req.protocol}://${req.get('host')}/s/${contract.short_link_code || contract.signing_link_token}`;
 
     res.render('sales/contract-details', {
       title: '合約詳情',
@@ -630,9 +635,15 @@ app.get('/sales/contracts/:id', checkAuth, async (req, res) => {
 });
 
 // 簽署短網址導向
-app.get('/s/:token', (req, res) => {
-  const target = `/contracts/sign/${req.params.token}`;
-  res.redirect(302, target);
+app.get('/s/:code', async (req, res) => {
+  try {
+    const short = await contractModel.findByShortCode(req.params.code);
+    const targetToken = short?.signing_link_token || req.params.code; // 舊連結仍可直接使用 token
+    res.redirect(302, `/contracts/sign/${targetToken}`);
+  } catch (error) {
+    console.error('Failed to resolve short signing link:', error);
+    res.status(500).send('無法導向簽署頁面');
+  }
 });
 
 

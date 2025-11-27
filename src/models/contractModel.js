@@ -17,7 +17,9 @@ async function createContractsTable() {
       status VARCHAR(50) NOT NULL DEFAULT 'DRAFT', -- e.g., 'DRAFT', 'PENDING_SIGNATURE', 'SIGNED'
       client_name VARCHAR(255),
       verification_code_hash VARCHAR(255), -- Hash of the code client needs to enter
+      verification_code_plaintext VARCHAR(6), -- Plain code for internal reference
       signing_link_token VARCHAR(255) UNIQUE, -- Unique token for the signing link
+      short_link_code VARCHAR(50) UNIQUE, -- Short code for compact signing link
       signature_image TEXT, -- Base64 data URL of the signature
       signed_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -26,10 +28,23 @@ async function createContractsTable() {
   `;
   try {
     await db.query(queryText);
+    await db.query('ALTER TABLE contracts ADD COLUMN IF NOT EXISTS verification_code_plaintext VARCHAR(6);');
+    await db.query('ALTER TABLE contracts ADD COLUMN IF NOT EXISTS short_link_code VARCHAR(50);');
+    await db.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_contracts_short_link_code ON contracts(short_link_code);');
     console.log('Contracts table checked/created successfully.');
   } catch (error) {
     console.error('Error creating contracts table:', error.message);
     throw error;
+  }
+}
+
+async function generateUniqueShortCode() {
+  while (true) {
+    const candidate = crypto.randomBytes(4).toString('hex'); // 8 chars
+    const { rows } = await db.query('SELECT 1 FROM contracts WHERE short_link_code = $1', [candidate]);
+    if (rows.length === 0) {
+      return candidate;
+    }
   }
 }
 
@@ -68,6 +83,9 @@ async function create(contractData) {
   // 1. Generate unique signing token
   const signing_link_token = crypto.randomBytes(32).toString('hex');
 
+  // 1b. Generate unique short link code for concise sharing
+  const short_link_code = await generateUniqueShortCode();
+
   // 2. Generate 6-digit verification code
   const verification_code = Math.floor(100000 + Math.random() * 900000).toString();
   const verification_code_hash = await bcrypt.hash(verification_code, 10); // Using bcrypt for hashing
@@ -75,8 +93,8 @@ async function create(contractData) {
   // 3. Insert into database
   const queryText = `
     INSERT INTO contracts
-      (salesperson_id, template_id, client_name, variable_values, signing_link_token, verification_code_hash, status)
-    VALUES ($1, $2, $3, $4, $5, $6, 'PENDING_SIGNATURE')
+      (salesperson_id, template_id, client_name, variable_values, signing_link_token, short_link_code, verification_code_hash, verification_code_plaintext, status)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING_SIGNATURE')
     RETURNING *;
   `;
   const values = [
@@ -85,7 +103,9 @@ async function create(contractData) {
     client_name,
     variable_values,
     signing_link_token,
+    short_link_code,
     verification_code_hash,
+    verification_code,
   ];
 
   const { rows } = await db.query(queryText, values);
@@ -103,13 +123,16 @@ async function findById(id) {
       c.client_name,
       c.variable_values,
       c.verification_code_hash,
+      c.verification_code_plaintext,
       c.signing_link_token,
+      c.short_link_code,
       c.signature_image,
       c.signed_at,
       c.created_at,
       c.salesperson_id,
       ct.name as template_name,
-      ct.content as template_content
+      ct.content as template_content,
+      ct.variables as template_variables
     FROM contracts c
     JOIN contract_templates ct ON c.template_id = ct.id
     WHERE c.id = $1;
@@ -131,6 +154,8 @@ async function findByToken(token) {
       c.client_name,
       c.variable_values,
       c.verification_code_hash,
+      c.verification_code_plaintext,
+      c.short_link_code,
       c.signature_image,
       c.signed_at,
       ct.name as template_name,
@@ -149,7 +174,26 @@ async function findByToken(token) {
  * @param {number} salespersonId - 業務員的使用者 ID
  * @returns {Array<object>} - 合約物件陣列
  */
-async function findBySalesperson(salespersonId) {
+async function findBySalesperson(salespersonId, { startDate, endDate, status } = {}) {
+  const conditions = ['c.salesperson_id = $1'];
+  const values = [salespersonId];
+  let index = 2;
+
+  if (startDate) {
+    conditions.push(`c.created_at >= $${index++}`);
+    values.push(startDate);
+  }
+
+  if (endDate) {
+    conditions.push(`c.created_at <= $${index++}`);
+    values.push(endDate);
+  }
+
+  if (status && status !== 'ALL') {
+    conditions.push(`c.status = $${index++}`);
+    values.push(status);
+  }
+
   const queryText = `
     SELECT
       c.id,
@@ -157,14 +201,54 @@ async function findBySalesperson(salespersonId) {
       c.client_name,
       c.signed_at,
       c.created_at,
+      c.short_link_code,
       ct.name as template_name
     FROM contracts c
     LEFT JOIN contract_templates ct ON c.template_id = ct.id
-    WHERE c.salesperson_id = $1
+    WHERE ${conditions.join(' AND ')}
     ORDER BY c.created_at DESC;
   `;
-  const { rows } = await db.query(queryText, [salespersonId]);
+
+  const { rows } = await db.query(queryText, values);
   return rows;
+}
+
+async function update(id, { client_name, variable_values }) {
+  const queryText = `
+    UPDATE contracts
+    SET client_name = $1,
+        variable_values = $2,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $3
+    RETURNING *;
+  `;
+  const { rows } = await db.query(queryText, [client_name, variable_values, id]);
+  return rows[0] || null;
+}
+
+async function findByShortCode(code) {
+  const queryText = `
+    SELECT signing_link_token
+    FROM contracts
+    WHERE short_link_code = $1;
+  `;
+
+  const { rows } = await db.query(queryText, [code]);
+  return rows[0] || null;
+}
+
+async function ensureShortLinkCode(contractId) {
+  const queryText = `
+    UPDATE contracts
+    SET short_link_code = $1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2
+    RETURNING short_link_code;
+  `;
+
+  const shortCode = await generateUniqueShortCode();
+  const { rows } = await db.query(queryText, [shortCode, contractId]);
+  return rows[0]?.short_link_code || shortCode;
 }
 
 async function markAsSigned(id, signatureImage) {
@@ -188,5 +272,8 @@ module.exports = {
   findById,
   findBySalesperson,
   findByToken,
+  findByShortCode,
   markAsSigned,
+  update,
+  ensureShortLinkCode,
 };

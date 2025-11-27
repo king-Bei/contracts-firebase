@@ -253,13 +253,86 @@ app.get('/admin/contracts/export', checkAuth, checkAdmin, async (req, res) => {
 app.get('/admin/templates', checkAuth, checkAdmin, async (req, res) => {
   try {
     const templates = await contractTemplateModel.findAll();
-    res.render('manage-templates', { 
-      title: '管理合約範本', 
-      templates: templates 
+    res.render('manage-templates', {
+      title: '管理合約範本',
+      templates: templates
     });
   } catch (error) {
     console.error('Failed to load template management page:', error);
     res.status(500).send('無法載入範本管理頁面');
+  }
+});
+
+app.get('/admin/templates/new', checkAuth, checkAdmin, async (req, res) => {
+  res.render('new-template', { title: '建立新合約範本' });
+});
+
+app.post('/admin/templates/new', checkAuth, checkAdmin, async (req, res) => {
+  try {
+    const { name, content } = req.body;
+    const variables = req.body.variables ? JSON.parse(req.body.variables) : [];
+
+    await contractTemplateModel.create({ name, content, variables });
+    res.redirect('/admin/templates');
+  } catch (error) {
+    console.error('Failed to create template:', error);
+    res.status(500).send('無法建立範本');
+  }
+});
+
+app.get('/admin/templates/edit/:id', checkAuth, checkAdmin, async (req, res) => {
+  try {
+    const template = await contractTemplateModel.findById(req.params.id);
+    if (!template) {
+      return res.status(404).send('找不到範本');
+    }
+
+    res.render('edit-template', {
+      title: '編輯合約範本',
+      template,
+      variables: Array.isArray(template.variables) ? template.variables : JSON.parse(template.variables || '[]'),
+    });
+  } catch (error) {
+    console.error('Failed to load template edit page:', error);
+    res.status(500).send('無法載入範本編輯頁面');
+  }
+});
+
+app.post('/admin/templates/edit/:id', checkAuth, checkAdmin, async (req, res) => {
+  try {
+    const template = await contractTemplateModel.findById(req.params.id);
+    if (!template) {
+      return res.status(404).send('找不到範本');
+    }
+
+    const variables = req.body.variables ? JSON.parse(req.body.variables) : [];
+
+    await contractTemplateModel.update(req.params.id, {
+      name: req.body.name,
+      content: req.body.content,
+      variables,
+      is_active: req.body.is_active === 'on',
+    });
+
+    res.redirect('/admin/templates');
+  } catch (error) {
+    console.error('Failed to update template:', error);
+    res.status(500).send('無法更新範本');
+  }
+});
+
+app.post('/admin/templates/:id/toggle', checkAuth, checkAdmin, async (req, res) => {
+  try {
+    const template = await contractTemplateModel.findById(req.params.id);
+    if (!template) {
+      return res.status(404).send('找不到範本');
+    }
+
+    await contractTemplateModel.setActive(req.params.id, !template.is_active);
+    res.redirect('/admin/templates');
+  } catch (error) {
+    console.error('Failed to toggle template:', error);
+    res.status(500).send('無法更新範本狀態');
   }
 });
 
@@ -280,8 +353,30 @@ app.get('/sales', checkAuth, async (req, res) => {
     return res.status(403).send('權限不足');
   }
   try {
-    const contracts = await contractModel.findBySalesperson(req.session.user.id);
-    res.render('sales', { title: '業務員儀表板', contracts: contracts, user: req.session.user });
+    const { start_date, end_date, status } = req.query;
+    const defaultStart = new Date();
+    defaultStart.setMonth(defaultStart.getMonth() - 3);
+    const parsedStart = start_date ? new Date(start_date) : defaultStart;
+    const parsedEnd = end_date ? new Date(end_date) : new Date();
+    const startDate = isNaN(parsedStart) ? defaultStart : parsedStart;
+    const endDate = isNaN(parsedEnd) ? new Date() : parsedEnd;
+
+    const contracts = await contractModel.findBySalesperson(req.session.user.id, {
+      startDate,
+      endDate,
+      status: status || 'ALL',
+    });
+
+    res.render('sales', {
+      title: '業務員儀表板',
+      contracts,
+      user: req.session.user,
+      filters: {
+        start_date: startDate.toISOString().slice(0, 10),
+        end_date: endDate.toISOString().slice(0, 10),
+        status: status || 'ALL',
+      },
+    });
   } catch (error) {
     console.error('Failed to load sales page:', error);
     res.status(500).send('無法載入業務員儀表板');
@@ -302,7 +397,8 @@ app.get('/sales/contracts/new', checkAuth, async (req, res) => {
 // 處理新增合約邏輯
 app.post('/sales/contracts', checkAuth, async (req, res) => {
   try {
-    const { client_name, template_id, variables } = req.body;
+    const { client_name, template_id } = req.body;
+    const variables = typeof req.body.variables === 'object' ? req.body.variables : {};
     const salesperson_id = req.session.user.id;
 
     const contractData = {
@@ -320,6 +416,81 @@ app.post('/sales/contracts', checkAuth, async (req, res) => {
   } catch (error) {
     console.error('Failed to create contract:', error);
     res.status(500).send('無法建立合約');
+  }
+});
+
+app.get('/sales/contracts/:id/edit', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  try {
+    let contract = await contractModel.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).send('找不到合約');
+    }
+
+    if (contract.salesperson_id !== req.session.user.id) {
+      return res.status(403).send('您無權編輯此合約');
+    }
+
+    if (contract.status === 'SIGNED') {
+      return res.status(400).send('已簽署合約不可修改');
+    }
+
+    let templateVariables = [];
+    try {
+      if (Array.isArray(contract.template_variables)) {
+        templateVariables = contract.template_variables;
+      } else if (contract.template_variables) {
+        templateVariables = JSON.parse(contract.template_variables || '[]');
+      }
+    } catch (e) {
+      templateVariables = [];
+    }
+
+    res.render('sales/edit-contract', {
+      title: '編輯合約',
+      contract,
+      templateVariables,
+      user: req.session.user,
+    });
+  } catch (error) {
+    console.error('Failed to load edit page:', error);
+    res.status(500).send('無法載入編輯頁面');
+  }
+});
+
+app.post('/sales/contracts/:id/edit', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  try {
+    const contract = await contractModel.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).send('找不到合約');
+    }
+
+    if (contract.salesperson_id !== req.session.user.id) {
+      return res.status(403).send('您無權編輯此合約');
+    }
+
+    if (contract.status === 'SIGNED') {
+      return res.status(400).send('已簽署合約不可修改');
+    }
+
+    const updatedVariables = typeof req.body.variables === 'object' ? req.body.variables : {};
+
+    await contractModel.update(contract.id, {
+      client_name: req.body.client_name,
+      variable_values: updatedVariables,
+    });
+
+    res.redirect(`/sales/contracts/${contract.id}`);
+  } catch (error) {
+    console.error('Failed to update contract:', error);
+    res.status(500).send('無法更新合約');
   }
 });
 
@@ -436,21 +607,42 @@ app.get('/sales/contracts/:id', checkAuth, async (req, res) => {
       return res.status(403).send('您無權查看此合約');
     }
 
+    if (!contract.short_link_code) {
+      const shortCode = await contractModel.ensureShortLinkCode(contract.id);
+      contract = { ...contract, short_link_code: shortCode };
+    }
+
     const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values);
-    const plaintextCode = req.session.lastGeneratedCode || null;
+    const plaintextCode = contract.verification_code_plaintext || req.session.lastGeneratedCode || null;
     delete req.session.lastGeneratedCode;
+
+    const fullShareLink = `${req.protocol}://${req.get('host')}/contracts/sign/${contract.signing_link_token}`;
+    const shortShareLink = `${req.protocol}://${req.get('host')}/s/${contract.short_link_code || contract.signing_link_token}`;
 
     res.render('sales/contract-details', {
       title: '合約詳情',
       contract,
       previewContent,
-      shareLink: `${req.protocol}://${req.get('host')}/contracts/sign/${contract.signing_link_token}`,
+      shareLink: fullShareLink,
+      shortShareLink,
       plaintextCode,
       user: req.session.user,
     });
   } catch (error) {
     console.error('Failed to load contract details:', error);
     res.status(500).send('無法載入合約詳情');
+  }
+});
+
+// 簽署短網址導向
+app.get('/s/:code', async (req, res) => {
+  try {
+    const short = await contractModel.findByShortCode(req.params.code);
+    const targetToken = short?.signing_link_token || req.params.code; // 舊連結仍可直接使用 token
+    res.redirect(302, `/contracts/sign/${targetToken}`);
+  } catch (error) {
+    console.error('Failed to resolve short signing link:', error);
+    res.status(500).send('無法導向簽署頁面');
   }
 });
 

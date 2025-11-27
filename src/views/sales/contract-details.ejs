@@ -41,19 +41,24 @@
       <div class="card-body">
         <p class="mb-2">請將以下連結與驗證碼提供給客戶。</p>
         <div class="mb-3">
-          <label class="form-label">簽署連結</label>
-          <input type="text" readonly class="form-control" value="<%= shareLink %>">
+          <label class="form-label">簽署短連結</label>
+          <div class="input-group mb-2">
+            <input type="text" readonly class="form-control" id="short-share-link" value="<%= shortShareLink %>">
+            <button class="btn btn-outline-primary" type="button" id="copy-short-share-link">複製</button>
+          </div>
+          <div class="form-text">如需完整網址，可使用：<code><%= shareLink %></code></div>
         </div>
-        <% if (plaintextCode) { %>
-          <div class="alert alert-success" role="alert">
-            <strong>客戶驗證碼：</strong> <kbd><%= plaintextCode %></kbd>
-            <div class="small text-muted mt-2">驗證碼僅顯示一次，請妥善保存。</div>
+        <div class="alert alert-success" role="alert">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <strong>客戶驗證碼：</strong> <kbd><%= plaintextCode || 'N/A' %></kbd>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="copy-code" <%= plaintextCode ? '' : 'disabled' %>>
+              複製驗證碼
+            </button>
           </div>
-        <% } else { %>
-          <div class="alert alert-warning" role="alert">
-            驗證碼已隱藏。如需再次取得，請聯繫系統管理員重新產生合約。
-          </div>
-        <% } %>
+          <div class="small text-muted mt-2">驗證碼將同步顯示於此頁，方便業務員再次確認。</div>
+        </div>
       </div>
     </div>
   </div>
@@ -73,3 +78,33 @@
 </div>
 
 <%- include('../partials/footer') %>
+
+<script>
+  const copyShortLinkBtn = document.getElementById('copy-short-share-link');
+  const copyCodeBtn = document.getElementById('copy-code');
+
+  if (copyShortLinkBtn) {
+    copyShortLinkBtn.addEventListener('click', async () => {
+      const linkInput = document.getElementById('short-share-link');
+      try {
+        await navigator.clipboard.writeText(linkInput.value);
+        copyShortLinkBtn.textContent = '已複製';
+        setTimeout(() => copyShortLinkBtn.textContent = '複製', 1500);
+      } catch (e) {
+        alert('無法複製，請手動選取文字。');
+      }
+    });
+  }
+
+  if (copyCodeBtn) {
+    copyCodeBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText('<%= plaintextCode || "" %>');
+        copyCodeBtn.textContent = '已複製';
+        setTimeout(() => copyCodeBtn.textContent = '複製驗證碼', 1500);
+      } catch (e) {
+        alert('無法複製，請手動選取驗證碼。');
+      }
+    });
+  }
+</script>

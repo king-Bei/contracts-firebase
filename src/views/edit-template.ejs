@@ -1,0 +1,124 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <h1 class="mb-4">編輯合約範本</h1>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form action="/admin/templates/edit/<%= template.id %>" method="POST">
+                <div class="mb-3">
+                    <label for="name" class="form-label">範本名稱</label>
+                    <input type="text" class="form-control" id="name" name="name" value="<%= template.name %>" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="content" class="form-label">合約內容</label>
+                    <p class="form-text">
+                        使用 <code>{{variable_key}}</code> 的格式來插入變數，例如 <code>{{client_name}}</code>。
+                    </p>
+                    <textarea class="form-control" id="content" name="content" rows="15" required><%= template.content %></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <h5 class="mt-4">範本變數</h5>
+                    <p class="form-text">
+                        變數名稱建議使用英數與底線 (例：client_name)，顯示標籤則為給使用者看的中文說明。
+                    </p>
+                    <div id="variables-container">
+                        <% if (variables && variables.length > 0) { %>
+                            <% variables.forEach((variable, index) => { %>
+                                <div class="row mb-2 g-2">
+                                    <div class="col-md-5">
+                                        <input type="text" class="form-control" placeholder="變數名稱" name="var_key_<%= index %>" value="<%= variable.key %>" required>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <input type="text" class="form-control" placeholder="顯示標籤" name="var_label_<%= index %>" value="<%= variable.label %>" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-danger w-100 remove-variable">移除</button>
+                                    </div>
+                                </div>
+                            <% }) %>
+                        <% } %>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary mt-2" id="add-variable">新增變數</button>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="on" id="is_active" name="is_active" <%= template.is_active ? 'checked' : '' %>>
+                    <label class="form-check-label" for="is_active">啟用此範本</label>
+                </div>
+
+                <input type="hidden" name="variables" id="variables-json">
+
+                <div class="d-flex justify-content-end">
+                    <a href="/admin/templates" class="btn btn-secondary me-2">取消</a>
+                    <button type="submit" class="btn btn-primary">儲存變更</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+let variableCount = <%= variables?.length || 0 %>;
+
+function buildRow(key = '', label = '') {
+    const row = document.createElement('div');
+    row.classList.add('row', 'mb-2', 'g-2');
+    row.innerHTML = `
+        <div class="col-md-5">
+            <input type="text" class="form-control" placeholder="變數名稱" name="var_key_${variableCount}" value="${key}" required>
+        </div>
+        <div class="col-md-5">
+            <input type="text" class="form-control" placeholder="顯示標籤" name="var_label_${variableCount}" value="${label}" required>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-danger w-100 remove-variable">移除</button>
+        </div>
+    `;
+    variableCount++;
+    return row;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const variablesContainer = document.getElementById('variables-container');
+    const addVariableButton = document.getElementById('add-variable');
+    const variablesJsonInput = document.getElementById('variables-json');
+    const form = document.querySelector('form');
+
+    addVariableButton.addEventListener('click', () => {
+        variablesContainer.appendChild(buildRow());
+    });
+
+    variablesContainer.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-variable')) {
+            e.target.closest('.row').remove();
+        }
+    });
+
+    form.addEventListener('submit', (e) => {
+        const variables = [];
+        const rows = variablesContainer.querySelectorAll('.row');
+        for (const row of rows) {
+            const keyInput = row.querySelector('input[name^="var_key_"]');
+            const labelInput = row.querySelector('input[name^="var_label_"]');
+            const key = keyInput?.value.trim();
+            const label = labelInput?.value.trim();
+
+            if (key && label) {
+                if (!/^[a-zA-Z0-9_]+$/.test(key)) {
+                    alert('變數名稱只能包含英數與底線。');
+                    e.preventDefault();
+                    return;
+                }
+                variables.push({ key, label });
+            }
+        }
+
+        variablesJsonInput.value = JSON.stringify(variables);
+    });
+});
+</script>
+
+<%- include('partials/footer') %>

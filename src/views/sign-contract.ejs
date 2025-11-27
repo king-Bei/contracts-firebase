@@ -1,0 +1,99 @@
+<%- include('partials/header') %>
+<div class="py-4">
+  <h1 class="h3 mb-3">合約簽署</h1>
+  <% if (statusMessage) { %>
+    <div class="alert alert-info"><%= statusMessage %></div>
+  <% } %>
+  <% if (error) { %>
+    <div class="alert alert-danger"><%= error %></div>
+  <% } %>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <strong><%= contract.template_name %></strong>
+    </div>
+    <div class="card-body">
+      <p class="mb-2"><strong>客戶名稱：</strong><%= contract.client_name || '-' %></p>
+      <% if (contract.status === 'SIGNED') { %>
+        <span class="badge bg-success">已簽署</span>
+      <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
+        <span class="badge bg-warning text-dark">待簽署</span>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">合約內容</div>
+    <div class="card-body">
+      <div class="border rounded p-3 bg-light" style="white-space: pre-wrap;">
+        <%- previewContent %>
+      </div>
+    </div>
+  </div>
+
+  <% if (contract.status === 'PENDING_SIGNATURE') { %>
+    <div class="card shadow-sm">
+      <div class="card-header">簽署確認</div>
+      <div class="card-body">
+        <form method="POST" action="" onsubmit="return handleSubmit();">
+          <div class="mb-3">
+            <label class="form-label">驗證碼</label>
+            <input type="text" name="verification_code" class="form-control" required maxlength="6" pattern="\\d{6}">
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" value="on" id="agree_terms" name="agree_terms" required>
+            <label class="form-check-label" for="agree_terms">我已閱讀並同意個資保護條款</label>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">簽名</label>
+            <div class="border rounded" style="height: 220px;">
+              <canvas id="signature-pad" class="w-100 h-100"></canvas>
+            </div>
+            <div class="mt-2 d-flex gap-2">
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="clear-signature">清除簽名</button>
+            </div>
+            <input type="hidden" name="signature_data" id="signature_data">
+          </div>
+
+          <button type="submit" class="btn btn-primary">送出簽署</button>
+        </form>
+      </div>
+    </div>
+  <% } %>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
+<script>
+const canvas = document.getElementById('signature-pad');
+const clearBtn = document.getElementById('clear-signature');
+const hiddenInput = document.getElementById('signature_data');
+let signaturePad = null;
+
+if (canvas) {
+  signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
+
+  const resizeCanvas = () => {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width = canvas.offsetWidth * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext('2d').scale(ratio, ratio);
+    signaturePad.clear();
+  };
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  clearBtn.addEventListener('click', () => signaturePad.clear());
+}
+
+function handleSubmit() {
+  if (!signaturePad) return false;
+  if (signaturePad.isEmpty()) {
+    alert('請先簽名再送出。');
+    return false;
+  }
+  hiddenInput.value = signaturePad.toDataURL();
+  return true;
+}
+</script>
+<%- include('partials/footer') %>

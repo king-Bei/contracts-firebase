@@ -1,0 +1,129 @@
+<%- include('partials/header') %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1><%= title %></h1>
+  <div>
+    <span>你好, <%= user.name %></span>
+    <a href="/logout" class="btn btn-secondary btn-sm ms-2">登出</a>
+  </div>
+</div>
+
+
+<!-- User List Section -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <h2>業務員列表</h2>
+  </div>
+  <div class="card-body">
+    <table class="table table-striped table-hover">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>員工編號</th>
+          <th>姓名</th>
+          <th>角色</th>
+          <th>狀態</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if(users && users.length > 0) { %>
+          <% users.forEach(u => { %>
+            <tr>
+              <td><%= u.id %></td>
+              <td><%= u.employee_id %></td>
+              <td><%= u.name %></td>
+              <td><%= u.role %></td>
+              <td><%= u.is_active ? '啟用' : '停用' %></td>
+              <td>
+                <% if (user.id !== u.id) { %>
+                  <a href="/admin/users/edit/<%= u.id %>" class="btn btn-sm btn-outline-primary">修改</a>
+                  <form action="/admin/users/deactivate" method="POST" style="display: inline-block;">
+                    <input type="hidden" name="userId" value="<%= u.id %>">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('確定要停用這位使用者嗎？')">
+                      停用
+                    </button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr>
+            <td colspan="6" class="text-center">沒有任何使用者</td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add User Section -->
+<div class="card shadow-sm">
+  <div class="card-header">
+    <h2>新增業務員</h2>
+  </div>
+  <div class="card-body">
+    <form action="/admin/users" method="POST">
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <label for="employee_id" class="form-label">員工編號</label>
+          <input type="text" class="form-control" id="employee_id" name="employee_id" required>
+        </div>
+        <div class="col-md-4 mb-3">
+          <label for="name" class="form-label">姓名</label>
+          <input type="text" class="form-control" id="name" name="name" required>
+        </div>
+        <div class="col-md-4 mb-3">
+          <label for="password" class="form-label">預設密碼</label>
+          <input type="password" class="form-control" id="password" name="password" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">新增</button>
+    </form>
+  </div>
+</div>
+
+
+<!-- Contract List Section -->
+<div class="card shadow-sm mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h2>合約列表</h2>
+    <a href="/admin/contracts/export" class="btn btn-sm btn-success">匯出 CSV</a>
+  </div>
+  <div class="card-body">
+    <table class="table table-striped table-hover">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>客戶名稱</th>
+          <th>範本名稱</th>
+          <th>負責業務</th>
+          <th>狀態</th>
+          <th>建立日期</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if(contracts && contracts.length > 0) { %>
+          <% contracts.forEach(c => { %>
+            <tr>
+              <td><%= c.id %></td>
+              <td><%= c.client_name || '-' %></td>
+              <td><%= c.template_name %></td>
+              <td><%= c.salesperson_name %></td>
+              <td><span class="badge bg-secondary"><%= c.status %></span></td>
+              <td><%= new Date(c.created_at).toLocaleDateString() %></td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr>
+            <td colspan="6" class="text-center">沒有任何合約</td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<%- include('partials/footer') %>

@@ -1,0 +1,108 @@
+<%- include('partials/header') %>
+
+<h1><%= title %></h1>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form action="/sales/contracts" method="POST">
+      <div class="mb-3">
+        <label for="client_name" class="form-label">客戶名稱</label>
+        <input type="text" class="form-control" id="client_name" name="client_name" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="template_id" class="form-label">選擇合約範本</label>
+        <select class="form-select" id="template_id" name="template_id" required>
+          <option value="" disabled selected>-- 請選擇一個範本 --</option>
+          <% templates.forEach(template => { %>
+            <option value="<%= template.id %>"><%= template.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      
+      <hr>
+
+      <div id="variable-fields" class="mt-3">
+        <!-- Dynamic fields will be inserted here by JavaScript -->
+      </div>
+
+      <button type="submit" class="btn btn-primary mt-4">建立合約草稿</button>
+      <a href="/sales" class="btn btn-secondary mt-4">取消</a>
+    </form>
+  </div>
+</div>
+
+<script>
+  const templateSelect = document.getElementById('template_id');
+  const variableFieldsContainer = document.getElementById('variable-fields');
+
+  templateSelect.addEventListener('change', async (e) => {
+    const templateId = e.target.value;
+    variableFieldsContainer.innerHTML = '<p>載入欄位中...</p>';
+
+    if (!templateId) {
+      variableFieldsContainer.innerHTML = '';
+      return;
+    }
+
+    try {
+      // We need an API endpoint to get template details
+      const response = await fetch(`/api/templates/${templateId}`);
+      if (!response.ok) {
+        throw new Error('無法取得範本資料');
+      }
+      const template = await response.json();
+      
+      variableFieldsContainer.innerHTML = ''; // Clear loading message
+
+      if (template && template.variables) {
+        template.variables.forEach(variable => {
+          const fieldGroup = document.createElement('div');
+          fieldGroup.className = 'mb-3';
+
+          const label = document.createElement('label');
+          label.className = 'form-label';
+          label.setAttribute('for', `var-${variable.name}`);
+          label.textContent = variable.label;
+
+          let input;
+          if (variable.type === 'textarea') {
+            input = document.createElement('textarea');
+            input.rows = 3;
+          } else if (variable.type === 'checkbox') {
+             // Handle checkbox differently
+            fieldGroup.className = 'mb-3 form-check';
+            input = document.createElement('input');
+            input.type = 'checkbox';
+            input.className = 'form-check-input';
+            
+            label.className = 'form-check-label'; // Bootstrap specific class for checkbox
+            
+            // Re-order for bootstrap styling
+            fieldGroup.appendChild(input);
+            fieldGroup.appendChild(label);
+            variableFieldsContainer.appendChild(fieldGroup);
+            return; // continue to next variable
+          }
+          else {
+            input = document.createElement('input');
+            input.type = variable.type || 'text';
+          }
+          
+          input.className = 'form-control';
+          input.id = `var-${variable.name}`;
+          // Use bracket notation to group variable values in the form submission
+          input.name = `variables[${variable.name}]`;
+
+          fieldGroup.appendChild(label);
+          fieldGroup.appendChild(input);
+          variableFieldsContainer.appendChild(fieldGroup);
+        });
+      }
+    } catch (error) {
+      variableFieldsContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
+    }
+  });
+</script>
+
+<%- include('partials/footer') %>

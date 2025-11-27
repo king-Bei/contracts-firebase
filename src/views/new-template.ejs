@@ -1,0 +1,110 @@
+<%- include('partials/header') %>
+
+<div class="container mt-4">
+    <h1 class="mb-4">建立新合約範本</h1>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form action="/admin/templates/new" method="POST">
+                <div class="mb-3">
+                    <label for="name" class="form-label">範本名稱</label>
+                    <input type="text" class="form-control" id="name" name="name" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="content" class="form-label">合約內容</label>
+                    <p class="form-text">
+                        使用 <code>{{variable_name}}</code> 的格式來插入變數。例如：<code>{{client_name}}</code>。
+                    </p>
+                    <textarea class="form-control" id="content" name="content" rows="15" required></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <h5 class="mt-4">範本變數</h5>
+                    <p class="form-text">
+                        定義在合約內容中使用的變數。請為每個變數提供一個唯一的「變數名稱」(英文，無空格) 和一個「顯示標籤」(給使用者看的中文說明)。
+                    </p>
+                    <div id="variables-container">
+                        <!-- Dynamic fields will be inserted here -->
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary mt-2" id="add-variable">新增變數</button>
+                </div>
+                
+                <input type="hidden" name="variables" id="variables-json">
+
+                <div class="d-flex justify-content-end">
+                    <a href="/admin/templates" class="btn btn-secondary me-2">取消</a>
+                    <button type="submit" class="btn btn-primary">儲存範本</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const variablesContainer = document.getElementById('variables-container');
+    const addVariableButton = document.getElementById('add-variable');
+    const variablesJsonInput = document.getElementById('variables-json');
+    const form = document.querySelector('form');
+
+    let variableCount = 0;
+
+    addVariableButton.addEventListener('click', function () {
+        variableCount++;
+        const newVariableGroup = document.createElement('div');
+        newVariableGroup.classList.add('row', 'mb-2', 'g-2');
+        newVariableGroup.innerHTML = `
+            <div class="col-md-5">
+                <input type="text" class="form-control" placeholder="變數名稱 (e.g., client_name)" name="var_key_${variableCount}" required>
+            </div>
+            <div class="col-md-5">
+                <input type="text" class="form-control" placeholder="顯示標籤 (e.g., 客戶姓名)" name="var_label_${variableCount}" required>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-danger w-100 remove-variable">移除</button>
+            </div>
+        `;
+        variablesContainer.appendChild(newVariableGroup);
+    });
+
+    variablesContainer.addEventListener('click', function (e) {
+        if (e.target.classList.contains('remove-variable')) {
+            e.target.closest('.row').remove();
+        }
+    });
+
+    form.addEventListener('submit', function (e) {
+        const variables = [];
+        const variableRows = variablesContainer.querySelectorAll('.row');
+        let isValid = true;
+        variableRows.forEach(row => {
+            const keyInput = row.querySelector('input[name^="var_key_"]');
+            const labelInput = row.querySelector('input[name^="var_label_"]');
+            
+            const key = keyInput.value.trim();
+            const label = labelInput.value.trim();
+
+            if (key && label) {
+                // Basic validation for variable name (no spaces, English chars)
+                if (!/^[a-zA-Z0-9_]+$/.test(key)) {
+                    alert('變數名稱只能包含英文字母、數字和底線，且不能有空格。');
+                    keyInput.focus();
+                    isValid = false;
+                    return;
+                }
+                variables.push({ key: key, label: label });
+            }
+        });
+
+        if (!isValid) {
+            e.preventDefault(); // Stop form submission if validation fails
+            return;
+        }
+
+        variablesJsonInput.value = JSON.stringify(variables);
+    });
+});
+</script>
+
+<%- include('partials/footer') %>

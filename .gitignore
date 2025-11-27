@@ -1,15 +1,5 @@
-.DS_Store
+# Dependencies
+/node_modules
+
+# Environment variables
 .env
-.env.*
-functions/.env
-functions/.env.*
-functions/serviceAccount.local.json
-
-node_modules/
-functions/node_modules/
-
-build/
-dist/
-
-firebase-debug.log
-ui-debug.log

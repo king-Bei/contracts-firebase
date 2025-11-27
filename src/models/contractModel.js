@@ -1,0 +1,156 @@
+// src/models/contractModel.js
+
+const db = require('../db');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+
+/**
+ * 創建 'contracts' 資料表 (如果不存在)。
+ */
+async function createContractsTable() {
+  const queryText = `
+    CREATE TABLE IF NOT EXISTS contracts (
+      id SERIAL PRIMARY KEY,
+      template_id INT NOT NULL REFERENCES contract_templates(id),
+      salesperson_id INT NOT NULL REFERENCES users(id),
+      variable_values JSONB NOT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'draft', -- e.g., 'draft', 'sent', 'signed'
+      client_name VARCHAR(255),
+      verification_code_hash VARCHAR(255), -- Hash of the code client needs to enter
+      signing_link_token VARCHAR(255) UNIQUE, -- Unique token for the signing link
+      signature_image TEXT, -- Base64 data URL of the signature
+      signed_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  try {
+    await db.query(queryText);
+    console.log('Contracts table checked/created successfully.');
+  } catch (error) {
+    console.error('Error creating contracts table:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * 查找所有合約，並帶上關聯的範本與業務員名稱
+ * @returns {Array<object>} - 合約物件陣列
+ */
+async function findAll() {
+  const queryText = `
+    SELECT
+      c.id,
+      c.status,
+      c.client_name,
+      c.signed_at,
+      c.created_at,
+      u.name as salesperson_name,
+      ct.name as template_name
+    FROM contracts c
+    LEFT JOIN users u ON c.salesperson_id = u.id
+    LEFT JOIN contract_templates ct ON c.template_id = ct.id
+    ORDER BY c.created_at DESC;
+  `;
+  const { rows } = await db.query(queryText);
+  return rows;
+}
+
+
+/**
+ * 建立一份新合約
+ * @param {object} contractData
+ * @returns {object} The created contract, including the plaintext verification code
+ */
+async function create(contractData) {
+  const { salesperson_id, template_id, client_name, variable_values } = contractData;
+
+  // 1. Generate unique signing token
+  const signing_link_token = crypto.randomBytes(32).toString('hex');
+
+  // 2. Generate 6-digit verification code
+  const verification_code = Math.floor(100000 + Math.random() * 900000).toString();
+  const verification_code_hash = await bcrypt.hash(verification_code, 10); // Using bcrypt for hashing
+
+  // 3. Insert into database
+  const queryText = `
+    INSERT INTO contracts 
+      (salesperson_id, template_id, client_name, variable_values, signing_link_token, verification_code_hash, status)
+    VALUES ($1, $2, $3, $4, $5, $6, 'draft')
+    RETURNING *;
+  `;
+  const values = [
+    salesperson_id,
+    template_id,
+    client_name,
+    JSON.stringify(variable_values),
+    signing_link_token,
+    verification_code_hash,
+  ];
+
+  const { rows } = await db.query(queryText, values);
+  const newContract = rows[0];
+
+  // Return the new contract ALONG WITH the plaintext verification code for one-time display
+  return { ...newContract, verification_code };
+}
+
+// Placeholder for findById function
+async function findById(id) {
+  // Logic to be added later
+}
+
+/**
+ * 根據 signing_link_token 查找合約及關聯的範本內容
+ * @param {string} token - The unique signing link token
+ * @returns {object|null} - The contract object or null if not found
+ */
+async function findByToken(token) {
+  const queryText = `
+    SELECT
+      c.id,
+      c.status,
+      c.client_name,
+      c.variable_values,
+      c.verification_code_hash,
+      ct.name as template_name,
+      ct.content as template_content
+    FROM contracts c
+    JOIN contract_templates ct ON c.template_id = ct.id
+    WHERE c.signing_link_token = $1;
+  `;
+  const { rows } = await db.query(queryText, [token]);
+  return rows[0] || null;
+}
+
+
+/**
+ * 根據業務員 ID 查找其所有合約
+ * @param {number} salespersonId - 業務員的使用者 ID
+ * @returns {Array<object>} - 合約物件陣列
+ */
+async function findBySalesperson(salespersonId) {
+  const queryText = `
+    SELECT
+      c.id,
+      c.status,
+      c.client_name,
+      c.signed_at,
+      c.created_at,
+      ct.name as template_name
+    FROM contracts c
+    LEFT JOIN contract_templates ct ON c.template_id = ct.id
+    WHERE c.salesperson_id = $1
+    ORDER BY c.created_at DESC;
+  `;
+  const { rows } = await db.query(queryText, [salespersonId]);
+  return rows;
+}
+
+module.exports = {
+  createContractsTable,
+  findAll,
+  create,
+  findById,
+  findBySalesperson,
+};

@@ -1,0 +1,37 @@
+<%- include('partials/header') %>
+
+<h1><%= title %></h1>
+<p>正在編輯使用者: <strong><%= user.employee_id %></strong></p>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form action="/admin/users/edit/<%= user.id %>" method="POST">
+      <div class="mb-3">
+        <label for="name" class="form-label">姓名</label>
+        <input type="text" class="form-control" id="name" name="name" value="<%= user.name %>" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="role" class="form-label">角色</label>
+        <select class="form-select" id="role" name="role">
+          <option value="salesperson" <%= user.role === 'salesperson' ? 'selected' : '' %>>Salesperson</option>
+          <option value="admin" <%= user.role === 'admin' ? 'selected' : '' %>>Admin</option>
+        </select>
+      </div>
+
+      <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="is_active" name="is_active" <%= user.is_active ? 'checked' : '' %>>
+        <label class="form-check-label" for="is_active">啟用帳號</label>
+      </div>
+      
+      <p class="form-text text-muted">
+        注意：此表單不包含密碼修改。密碼應由使用者自行重設，或透過專門的密碼重設功能。
+      </p>
+
+      <button type="submit" class="btn btn-primary">儲存變更</button>
+      <a href="/admin" class="btn btn-secondary">取消</a>
+    </form>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

@@ -14,7 +14,7 @@ async function createContractsTable() {
       template_id INT NOT NULL REFERENCES contract_templates(id),
       salesperson_id INT NOT NULL REFERENCES users(id),
       variable_values JSONB NOT NULL,
-      status VARCHAR(50) NOT NULL DEFAULT 'draft', -- e.g., 'draft', 'sent', 'signed'
+      status VARCHAR(50) NOT NULL DEFAULT 'DRAFT', -- e.g., 'DRAFT', 'PENDING_SIGNATURE', 'SIGNED'
       client_name VARCHAR(255),
       verification_code_hash VARCHAR(255), -- Hash of the code client needs to enter
       signing_link_token VARCHAR(255) UNIQUE, -- Unique token for the signing link
@@ -74,16 +74,16 @@ async function create(contractData) {
 
   // 3. Insert into database
   const queryText = `
-    INSERT INTO contracts 
+    INSERT INTO contracts
       (salesperson_id, template_id, client_name, variable_values, signing_link_token, verification_code_hash, status)
-    VALUES ($1, $2, $3, $4, $5, $6, 'draft')
+    VALUES ($1, $2, $3, $4, $5, $6, 'PENDING_SIGNATURE')
     RETURNING *;
   `;
   const values = [
     salesperson_id,
     template_id,
     client_name,
-    JSON.stringify(variable_values),
+    variable_values,
     signing_link_token,
     verification_code_hash,
   ];
@@ -95,9 +95,27 @@ async function create(contractData) {
   return { ...newContract, verification_code };
 }
 
-// Placeholder for findById function
 async function findById(id) {
-  // Logic to be added later
+  const queryText = `
+    SELECT
+      c.id,
+      c.status,
+      c.client_name,
+      c.variable_values,
+      c.verification_code_hash,
+      c.signing_link_token,
+      c.signature_image,
+      c.signed_at,
+      c.created_at,
+      c.salesperson_id,
+      ct.name as template_name,
+      ct.content as template_content
+    FROM contracts c
+    JOIN contract_templates ct ON c.template_id = ct.id
+    WHERE c.id = $1;
+  `;
+  const { rows } = await db.query(queryText, [id]);
+  return rows[0] || null;
 }
 
 /**
@@ -113,6 +131,8 @@ async function findByToken(token) {
       c.client_name,
       c.variable_values,
       c.verification_code_hash,
+      c.signature_image,
+      c.signed_at,
       ct.name as template_name,
       ct.content as template_content
     FROM contracts c
@@ -147,10 +167,26 @@ async function findBySalesperson(salespersonId) {
   return rows;
 }
 
+async function markAsSigned(id, signatureImage) {
+  const queryText = `
+    UPDATE contracts
+    SET status = 'SIGNED',
+        signature_image = $1,
+        signed_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2
+    RETURNING *;
+  `;
+  const { rows } = await db.query(queryText, [signatureImage, id]);
+  return rows[0] || null;
+}
+
 module.exports = {
   createContractsTable,
   findAll,
   create,
   findById,
   findBySalesperson,
+  findByToken,
+  markAsSigned,
 };

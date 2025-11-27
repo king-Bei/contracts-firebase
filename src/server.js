@@ -21,8 +21,8 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // --- 中介軟體 (Middleware) ---
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static('public'));
 
@@ -61,6 +61,25 @@ const checkAdmin = (req, res, next) => {
   } else {
     res.status(403).send('權限不足');
   }
+};
+
+const renderTemplateWithVariables = (content, variables = {}) => {
+  let filled = content || '';
+  let parsedVariables = variables;
+
+  if (typeof variables === 'string') {
+    try {
+      parsedVariables = JSON.parse(variables || '{}');
+    } catch (e) {
+      parsedVariables = {};
+    }
+  }
+
+  Object.entries(parsedVariables || {}).forEach(([key, value]) => {
+    const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+    filled = filled.replace(regex, value ?? '');
+  });
+  return filled;
 };
 
 
@@ -262,7 +281,7 @@ app.get('/sales', checkAuth, async (req, res) => {
   }
   try {
     const contracts = await contractModel.findBySalesperson(req.session.user.id);
-    res.render('sales', { title: '業務員儀表板', contracts: contracts });
+    res.render('sales', { title: '業務員儀表板', contracts: contracts, user: req.session.user });
   } catch (error) {
     console.error('Failed to load sales page:', error);
     res.status(500).send('無法載入業務員儀表板');
@@ -294,14 +313,144 @@ app.post('/sales/contracts', checkAuth, async (req, res) => {
     };
 
     const newContract = await contractModel.create(contractData);
+    req.session.lastGeneratedCode = newContract.verification_code;
 
-    // For now, just redirect to the dashboard.
-    // In the future, we could redirect to a page showing the contract details and the verification code.
-    res.redirect('/sales');
+    res.redirect(`/sales/contracts/${newContract.id}`);
 
   } catch (error) {
     console.error('Failed to create contract:', error);
     res.status(500).send('無法建立合約');
+  }
+});
+
+// 公開簽署頁面
+app.get('/contracts/sign/:token', async (req, res) => {
+  try {
+    const contract = await contractModel.findByToken(req.params.token);
+    if (!contract) {
+      return res.status(404).send('簽署連結無效');
+    }
+
+    if (contract.status !== 'PENDING_SIGNATURE') {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        contract,
+        previewContent: renderTemplateWithVariables(contract.template_content, contract.variable_values),
+        error: null,
+        statusMessage: '此合約目前無法簽署。',
+      });
+    }
+
+    res.render('sign-contract', {
+      title: '合約簽署',
+      contract,
+      previewContent: renderTemplateWithVariables(contract.template_content, contract.variable_values),
+      error: null,
+      statusMessage: null,
+    });
+  } catch (error) {
+    console.error('Failed to load signing page:', error);
+    res.status(500).send('無法載入簽署頁面');
+  }
+});
+
+app.post('/contracts/sign/:token', async (req, res) => {
+  try {
+    const contract = await contractModel.findByToken(req.params.token);
+    if (!contract) {
+      return res.status(404).send('簽署連結無效');
+    }
+
+    const { verification_code, agree_terms, signature_data } = req.body;
+    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values);
+
+    if (contract.status !== 'PENDING_SIGNATURE') {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        contract,
+        previewContent,
+        error: null,
+        statusMessage: '此合約目前無法簽署。',
+      });
+    }
+
+    if (!agree_terms) {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        contract,
+        previewContent,
+        error: '請先同意個資保護條款。',
+        statusMessage: null,
+      });
+    }
+
+    if (!signature_data) {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        contract,
+        previewContent,
+        error: '請提供簽名。',
+        statusMessage: null,
+      });
+    }
+
+    const isCodeValid = await bcrypt.compare(verification_code || '', contract.verification_code_hash);
+    if (!isCodeValid) {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        contract,
+        previewContent,
+        error: '驗證碼錯誤，請重新輸入。',
+        statusMessage: null,
+      });
+    }
+
+    const updated = await contractModel.markAsSigned(contract.id, signature_data);
+
+    res.render('sign-contract', {
+      title: '合約已完成',
+      contract: { ...contract, ...updated },
+      previewContent,
+      error: null,
+      statusMessage: '簽署完成！您可以下載或列印此頁面作為憑證。',
+    });
+  } catch (error) {
+    console.error('Failed to submit signature:', error);
+    res.status(500).send('無法完成簽署');
+  }
+});
+
+// 查看單一合約詳情
+app.get('/sales/contracts/:id', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  try {
+    const contract = await contractModel.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).send('找不到合約');
+    }
+
+    if (contract.salesperson_id !== req.session.user.id) {
+      return res.status(403).send('您無權查看此合約');
+    }
+
+    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values);
+    const plaintextCode = req.session.lastGeneratedCode || null;
+    delete req.session.lastGeneratedCode;
+
+    res.render('sales/contract-details', {
+      title: '合約詳情',
+      contract,
+      previewContent,
+      shareLink: `${req.protocol}://${req.get('host')}/contracts/sign/${contract.signing_link_token}`,
+      plaintextCode,
+      user: req.session.user,
+    });
+  } catch (error) {
+    console.error('Failed to load contract details:', error);
+    res.status(500).send('無法載入合約詳情');
   }
 });
 

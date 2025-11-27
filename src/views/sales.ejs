@@ -1,56 +1,74 @@
 <%- include('partials/header') %>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h1><%= title %></h1>
+  <h1>我的合約</h1>
   <div>
-    <span>你好, <%= user.name %></span>
+    <span>你好, <%= user.full_name || user.name %></span>
     <a href="/logout" class="btn btn-secondary btn-sm ms-2">登出</a>
   </div>
 </div>
 
 <div class="mb-4">
-  <a href="/sales/contracts/new" class="btn btn-primary btn-lg">＋ 新增合約</a>
+  <a href="/sales/contracts/new" class="btn btn-primary">＋ 新增合約</a>
 </div>
 
 <!-- Contract List Section -->
 <div class="card shadow-sm">
   <div class="card-header">
-    <h2>我的合約</h2>
+    <h2>合約列表</h2>
   </div>
   <div class="card-body">
-    <table class="table table-striped table-hover">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>客戶名稱</th>
-          <th>範本名稱</th>
-          <th>狀態</th>
-          <th>建立日期</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% if(contracts && contracts.length > 0) { %>
-          <% contracts.forEach(c => { %>
-            <tr>
-              <td><%= c.id %></td>
-              <td><%= c.client_name || '-' %></td>
-              <td><%= c.template_name %></td>
-              <td><span class="badge bg-secondary"><%= c.status %></span></td>
-              <td><%= new Date(c.created_at).toLocaleDateString() %></td>
-              <td>
-                <!-- Actions like edit/delete/send will be added later -->
-                <button class="btn btn-sm btn-outline-primary" disabled>修改</button>
-              </td>
-            </tr>
-          <% }) %>
-        <% } else { %>
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead>
           <tr>
-            <td colspan="6" class="text-center">沒有任何合約</td>
+            <th>客戶名稱</th>
+            <th>狀態</th>
+            <th>建立日期</th>
+            <th style="width: 320px;">操作</th>
           </tr>
-        <% } %>
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          <% if(contracts && contracts.length > 0) { %>
+            <% contracts.forEach(contract => { %>
+              <tr>
+                <td><%= contract.customer_name || '-' %></td>
+                <td>
+                  <% if (contract.status === 'SIGNED') { %>
+                      <span class="badge bg-success">已簽署</span>
+                  <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
+                      <span class="badge bg-warning text-dark">待簽署</span>
+                  <% } else if (contract.status === 'DRAFT') { %>
+                      <span class="badge bg-secondary">草稿</span>
+                  <% } else if (contract.status === 'CANCELLED') { %>
+                      <span class="badge bg-danger">已作廢</span>
+                  <% } else { %>
+                      <span class="badge bg-light text-dark"><%= contract.status %></span>
+                  <% } %>
+                </td>
+                <td><%= new Date(contract.created_at).toLocaleDateString() %></td>
+                <td>
+                  <a href="/sales/contracts/<%= contract.id %>" class="btn btn-sm btn-outline-info">詳情</a>
+                  <% if (contract.status === 'DRAFT') { %>
+                    <a href="/sales/contracts/<%= contract.id %>/edit" class="btn btn-sm btn-outline-warning">編輯</a>
+                    <form action="/sales/contracts/<%= contract.id %>/generate-link" method="POST" class="d-inline" onsubmit="return confirm('您確定要產生簽署連結嗎？產生後合約內容將無法修改。');">
+                        <button type="submit" class="btn btn-sm btn-outline-success">發送簽署</button>
+                    </form>
+                    <form action="/sales/contracts/<%= contract.id %>/cancel" method="POST" class="d-inline" onsubmit="return confirm('您確定要作廢此合約草稿嗎？');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">作廢</button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="4" class="text-center">沒有任何合約</td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 

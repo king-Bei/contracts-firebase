@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>業務員儀表板</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <%- include('../partials/navbar', { user: user }) %>
+
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1>我的合約</h1>
+            <a href="/sales/contracts/new" class="btn btn-primary">建立新合約</a>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th scope="col">客戶名稱</th>
+                                <th scope="col">狀態</th>
+                                <th scope="col">建立日期</th>
+                                <th scope="col" style="width: 320px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (contracts && contracts.length > 0) { %>
+                                <% contracts.forEach(contract => { %>
+                                    <tr>
+                                        <td><%= contract.customer_name || 'N/A' %></td>
+                                        <td>
+                                            <!-- 根據狀態顯示不同顏色的標籤 -->
+                                            <% if (contract.status === 'SIGNED') { %>
+                                                <span class="badge bg-success">已簽署</span>
+                                            <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
+                                                <span class="badge bg-warning text-dark">待簽署</span>
+                                            <% } else if (contract.status === 'DRAFT') { %>
+                                                <span class="badge bg-secondary">草稿</span>
+                                            <% } else if (contract.status === 'CANCELLED') { %>
+                                                <span class="badge bg-danger">已作廢</span>
+                                            <% } else { %>
+                                                <span class="badge bg-light text-dark"><%= contract.status %></span>
+                                            <% } %>
+                                        </td>
+                                        <td><%= new Date(contract.created_at).toLocaleDateString() %></td>
+                                        <td>
+                                            <a href="/sales/contracts/<%= contract.id %>" class="btn btn-sm btn-outline-info">詳情</a>
+                                            
+                                            <% if (contract.status === 'DRAFT') { %>
+                                                <a href="/sales/contracts/<%= contract.id %>/edit" class="btn btn-sm btn-outline-warning">編輯</a>
+                                                <form action="/sales/contracts/<%= contract.id %>/generate-link" method="POST" class="d-inline" onsubmit="return confirm('您確定要產生簽署連結嗎？產生後合約內容將無法修改。');">
+                                                    <button type="submit" class="btn btn-sm btn-outline-success">發送簽署</button>
+                                                </form>
+                                                <form action="/sales/contracts/<%= contract.id %>/cancel" method="POST" class="d-inline" onsubmit="return confirm('您確定要作廢此合約草稿嗎？');">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">作廢</button>
+                                                </form>
+                                            <% } %>
+                                        </td>
+                                    </tr>
+                                <% }) %>
+                            <% } else { %>
+                                <tr>
+                                    <td colspan="4" class="text-center">您尚未建立任何合約。</td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

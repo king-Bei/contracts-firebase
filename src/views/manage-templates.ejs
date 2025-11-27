@@ -6,6 +6,8 @@
         <a href="/admin/templates/new" class="btn btn-primary">建立新範本</a>
     </div>
 
+    <div class="alert alert-info">建議先在 Word/Google 文件撰寫內容後貼上，並用 <code>{{變數鍵值}}</code> 保留需要替換的位置。</div>
+
     <div class="card shadow-sm">
         <div class="card-body">
             <h5 class="card-title">現有範本</h5>
@@ -14,6 +16,7 @@
                     <tr>
                         <th scope="col">#</th>
                         <th scope="col">範本名稱</th>
+                        <th scope="col">狀態</th>
                         <th scope="col">操作</th>
                     </tr>
                 </thead>
@@ -24,9 +27,21 @@
                                 <th scope="row"><%= index + 1 %></th>
                                 <td><%= template.name %></td>
                                 <td>
+                                    <% if (template.is_active) { %>
+                                      <span class="badge bg-success">啟用</span>
+                                    <% } else { %>
+                                      <span class="badge bg-secondary">停用</span>
+                                    <% } %>
+                                </td>
+                                <td>
                                     <a href="/admin/templates/edit/<%= template.id %>" class="btn btn-sm btn-outline-secondary">編輯</a>
-                                    <!-- 新增刪除按鈕，可根據需求實作 -->
-                                    <!-- <button class="btn btn-sm btn-outline-danger">刪除</button> -->
+                                    <form action="/admin/templates/<%= template.id %>/toggle" method="POST" class="d-inline">
+                                      <% if (template.is_active) { %>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">停用</button>
+                                      <% } else { %>
+                                        <button type="submit" class="btn btn-sm btn-outline-success">啟用</button>
+                                      <% } %>
+                                    </form>
                                 </td>
                             </tr>
                         <% }); %>

@@ -12,6 +12,34 @@
   <a href="/sales/contracts/new" class="btn btn-primary">＋ 新增合約</a>
 </div>
 
+<form class="card shadow-sm mb-4" method="GET" action="/sales">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">開始日期</label>
+        <input type="date" class="form-control" name="start_date" value="<%= filters?.start_date %>">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">結束日期</label>
+        <input type="date" class="form-control" name="end_date" value="<%= filters?.end_date %>">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">狀態</label>
+        <select name="status" class="form-select">
+          <option value="ALL" <%= filters?.status === 'ALL' ? 'selected' : '' %>>全部</option>
+          <option value="PENDING_SIGNATURE" <%= filters?.status === 'PENDING_SIGNATURE' ? 'selected' : '' %>>待簽署</option>
+          <option value="SIGNED" <%= filters?.status === 'SIGNED' ? 'selected' : '' %>>已簽署</option>
+        </select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary w-100">套用篩選</button>
+        <a href="/sales" class="btn btn-outline-secondary">重置</a>
+      </div>
+    </div>
+    <p class="text-muted small mb-0 mt-2">預設顯示最近三個月內的合約，您可依需求調整範圍。</p>
+  </div>
+</form>
+
 <!-- Contract List Section -->
 <div class="card shadow-sm">
   <div class="card-header">
@@ -32,7 +60,7 @@
           <% if(contracts && contracts.length > 0) { %>
             <% contracts.forEach(contract => { %>
               <tr>
-                <td><%= contract.customer_name || '-' %></td>
+                <td><%= contract.client_name || '-' %></td>
                 <td>
                   <% if (contract.status === 'SIGNED') { %>
                       <span class="badge bg-success">已簽署</span>
@@ -49,14 +77,8 @@
                 <td><%= new Date(contract.created_at).toLocaleDateString() %></td>
                 <td>
                   <a href="/sales/contracts/<%= contract.id %>" class="btn btn-sm btn-outline-info">詳情</a>
-                  <% if (contract.status === 'DRAFT') { %>
+                  <% if (contract.status !== 'SIGNED') { %>
                     <a href="/sales/contracts/<%= contract.id %>/edit" class="btn btn-sm btn-outline-warning">編輯</a>
-                    <form action="/sales/contracts/<%= contract.id %>/generate-link" method="POST" class="d-inline" onsubmit="return confirm('您確定要產生簽署連結嗎？產生後合約內容將無法修改。');">
-                        <button type="submit" class="btn btn-sm btn-outline-success">發送簽署</button>
-                    </form>
-                    <form action="/sales/contracts/<%= contract.id %>/cancel" method="POST" class="d-inline" onsubmit="return confirm('您確定要作廢此合約草稿嗎？');">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">作廢</button>
-                    </form>
                   <% } %>
                 </td>
               </tr>

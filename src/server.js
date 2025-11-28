@@ -82,6 +82,17 @@ const renderTemplateWithVariables = (content, variables = {}) => {
   return filled;
 };
 
+const markContractVerified = (req, token) => {
+  if (!req.session.verifiedContracts) {
+    req.session.verifiedContracts = {};
+  }
+  req.session.verifiedContracts[token] = true;
+};
+
+const isContractVerified = (req, token) => {
+  return Boolean(req.session.verifiedContracts && req.session.verifiedContracts[token]);
+};
+
 
 // --- 網站頁面路由 ---
 
@@ -98,6 +109,11 @@ app.get('/', (req, res) => {
 // 登入頁
 app.get('/login', (req, res) => {
   res.render('login', { title: '登入', error: null });
+});
+
+// 個資保護條款
+app.get('/privacy', (req, res) => {
+  res.render('privacy', { title: '個資保護條款' });
 });
 
 // 處理登入邏輯
@@ -502,11 +518,20 @@ app.get('/contracts/sign/:token', async (req, res) => {
       return res.status(404).send('簽署連結無效');
     }
 
-    if (contract.status !== 'PENDING_SIGNATURE') {
+    const isVerified = isContractVerified(req, req.params.token);
+    const previewContent = isVerified
+      ? renderTemplateWithVariables(contract.template_content, contract.variable_values)
+      : null;
+    const canSign = contract.status === 'PENDING_SIGNATURE';
+
+    if (!canSign) {
       return res.render('sign-contract', {
         title: '合約簽署',
+        signingToken: req.params.token,
         contract,
-        previewContent: renderTemplateWithVariables(contract.template_content, contract.variable_values),
+        previewContent,
+        isVerified,
+        canSign,
         error: null,
         statusMessage: '此合約目前無法簽署。',
       });
@@ -514,14 +539,67 @@ app.get('/contracts/sign/:token', async (req, res) => {
 
     res.render('sign-contract', {
       title: '合約簽署',
+      signingToken: req.params.token,
       contract,
-      previewContent: renderTemplateWithVariables(contract.template_content, contract.variable_values),
+      previewContent,
+      isVerified,
+      canSign,
       error: null,
       statusMessage: null,
     });
   } catch (error) {
     console.error('Failed to load signing page:', error);
     res.status(500).send('無法載入簽署頁面');
+  }
+});
+
+// 驗證碼驗證
+app.post('/contracts/sign/:token/verify', async (req, res) => {
+  try {
+    const contract = await contractModel.findByToken(req.params.token);
+    if (!contract) {
+      return res.status(404).send('簽署連結無效');
+    }
+
+    const canSign = contract.status === 'PENDING_SIGNATURE';
+    const previewContent = isContractVerified(req, req.params.token)
+      ? renderTemplateWithVariables(contract.template_content, contract.variable_values)
+      : null;
+
+    const { verification_code } = req.body;
+    if (!contract.verification_code_hash) {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        signingToken: req.params.token,
+        contract,
+        previewContent: null,
+        isVerified: false,
+        canSign,
+        error: '目前無法驗證此合約，請聯繫您的業務員。',
+        statusMessage: canSign ? null : '此合約目前無法簽署。',
+      });
+    }
+
+    const isCodeValid = await bcrypt.compare(verification_code || '', contract.verification_code_hash);
+
+    if (!isCodeValid) {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        signingToken: req.params.token,
+        contract,
+        previewContent: null,
+        isVerified: false,
+        canSign,
+        error: '驗證碼錯誤，請重新輸入。',
+        statusMessage: canSign ? null : '此合約目前無法簽署。',
+      });
+    }
+
+    markContractVerified(req, req.params.token);
+    res.redirect(`/contracts/sign/${req.params.token}`);
+  } catch (error) {
+    console.error('Failed to verify code:', error);
+    res.status(500).send('驗證失敗，請稍後再試。');
   }
 });
 
@@ -532,14 +610,33 @@ app.post('/contracts/sign/:token', async (req, res) => {
       return res.status(404).send('簽署連結無效');
     }
 
-    const { verification_code, agree_terms, signature_data } = req.body;
-    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values);
+    const { agree_terms, signature_data } = req.body;
+    const isVerified = isContractVerified(req, req.params.token);
+    const previewContent = isVerified
+      ? renderTemplateWithVariables(contract.template_content, contract.variable_values)
+      : null;
+
+    if (!isVerified) {
+      return res.render('sign-contract', {
+        title: '合約簽署',
+        signingToken: req.params.token,
+        contract,
+        previewContent: null,
+        isVerified: false,
+        canSign: contract.status === 'PENDING_SIGNATURE',
+        error: '請先完成驗證碼驗證後再簽署。',
+        statusMessage: null,
+      });
+    }
 
     if (contract.status !== 'PENDING_SIGNATURE') {
       return res.render('sign-contract', {
         title: '合約簽署',
+        signingToken: req.params.token,
         contract,
         previewContent,
+        isVerified,
+        canSign: false,
         error: null,
         statusMessage: '此合約目前無法簽署。',
       });
@@ -548,6 +645,7 @@ app.post('/contracts/sign/:token', async (req, res) => {
     if (!agree_terms) {
       return res.render('sign-contract', {
         title: '合約簽署',
+        signingToken: req.params.token,
         contract,
         previewContent,
         error: '請先同意個資保護條款。',
@@ -558,30 +656,28 @@ app.post('/contracts/sign/:token', async (req, res) => {
     if (!signature_data) {
       return res.render('sign-contract', {
         title: '合約簽署',
+        signingToken: req.params.token,
         contract,
         previewContent,
+        isVerified,
+        canSign: true,
         error: '請提供簽名。',
         statusMessage: null,
       });
     }
 
-    const isCodeValid = await bcrypt.compare(verification_code || '', contract.verification_code_hash);
-    if (!isCodeValid) {
-      return res.render('sign-contract', {
-        title: '合約簽署',
-        contract,
-        previewContent,
-        error: '驗證碼錯誤，請重新輸入。',
-        statusMessage: null,
-      });
-    }
-
     const updated = await contractModel.markAsSigned(contract.id, signature_data);
+    if (req.session.verifiedContracts) {
+      delete req.session.verifiedContracts[req.params.token];
+    }
 
     res.render('sign-contract', {
       title: '合約已完成',
+      signingToken: req.params.token,
       contract: { ...contract, ...updated },
       previewContent,
+      isVerified: true,
+      canSign: false,
       error: null,
       statusMessage: '簽署完成！您可以下載或列印此頁面作為憑證。',
     });

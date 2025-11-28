@@ -14,9 +14,14 @@
                 <div class="mb-3">
                     <label for="content" class="form-label">合約內容</label>
                     <p class="form-text">
-                        使用 <code>{{variable_key}}</code> 的格式來插入變數，例如 <code>{{client_name}}</code>。
+                        使用 <code>{{variable_key}}</code> 格式插入變數（例：<code>{{client_name}}</code>）。可直接編輯或上傳檔案填入內容。
                     </p>
-                    <textarea class="form-control" id="content" name="content" rows="15" required><%= template.content %></textarea>
+                    <div class="d-flex flex-column flex-md-row gap-2 mb-2">
+                        <input type="file" accept=".txt,.html,.htm" class="form-control" id="content-upload">
+                        <button type="button" class="btn btn-outline-secondary" id="detect-variables">從內容偵測變數</button>
+                    </div>
+                    <div id="content-editor" class="form-control bg-light" style="min-height: 280px;" contenteditable="true"></div>
+                    <textarea class="d-none" id="content" name="content" required><%= template.content %></textarea>
                 </div>
 
                 <div class="mb-3">
@@ -41,7 +46,10 @@
                             <% }) %>
                         <% } %>
                     </div>
-                    <button type="button" class="btn btn-outline-secondary mt-2" id="add-variable">新增變數</button>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-outline-secondary" id="add-variable">新增變數</button>
+                        <button type="button" class="btn btn-outline-primary" id="insert-placeholder">插入選擇的變數佔位符</button>
+                    </div>
                 </div>
 
                 <div class="form-check mb-3">
@@ -86,6 +94,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const addVariableButton = document.getElementById('add-variable');
     const variablesJsonInput = document.getElementById('variables-json');
     const form = document.querySelector('form');
+    const contentEditor = document.getElementById('content-editor');
+    const contentInput = document.getElementById('content');
+    const uploadInput = document.getElementById('content-upload');
+    const detectButton = document.getElementById('detect-variables');
+    const insertPlaceholderButton = document.getElementById('insert-placeholder');
+
+    // 初始化編輯器內容
+    contentEditor.innerText = contentInput.value || '';
 
     addVariableButton.addEventListener('click', () => {
         variablesContainer.appendChild(buildRow());
@@ -94,6 +110,66 @@ document.addEventListener('DOMContentLoaded', () => {
     variablesContainer.addEventListener('click', (e) => {
         if (e.target.classList.contains('remove-variable')) {
             e.target.closest('.row').remove();
+        }
+    });
+
+    uploadInput.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            contentEditor.innerText = evt.target?.result || '';
+        };
+        reader.readAsText(file);
+    });
+
+    function syncContentToInput() {
+        contentInput.value = (contentEditor.innerText || '').trim();
+    }
+
+    function extractPlaceholders(text) {
+        const matches = [...(text || '').matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)];
+        return Array.from(new Set(matches.map(m => m[1])));
+    }
+
+    detectButton.addEventListener('click', () => {
+        const placeholders = extractPlaceholders(contentEditor.innerText || '');
+        if (!placeholders.length) {
+            alert('未找到符合 {{placeholder}} 格式的變數。');
+            return;
+        }
+        const existingKeys = new Set(
+            Array.from(variablesContainer.querySelectorAll('input[name^="var_key_"]'))
+                .map(input => input.value.trim())
+                .filter(Boolean)
+        );
+        let created = 0;
+        placeholders.forEach(key => {
+            if (!existingKeys.has(key)) {
+                variablesContainer.appendChild(buildRow(key, key));
+                created++;
+            }
+        });
+        alert(created > 0 ? `已加入 ${created} 個新變數。` : '所有偵測到的變數都已存在。');
+    });
+
+    insertPlaceholderButton.addEventListener('click', () => {
+        const keys = Array.from(variablesContainer.querySelectorAll('input[name^="var_key_"]'))
+            .map(input => input.value.trim())
+            .filter(Boolean);
+        if (!keys.length) {
+            alert('請先新增至少一個變數。');
+            return;
+        }
+        const suggestion = keys[0];
+        const selected = prompt('要插入的變數名稱（系統會自動加上 {{ }}）', suggestion);
+        if (!selected) return;
+        const placeholder = `{{${selected}}}`;
+        contentEditor.focus();
+        if (document.execCommand) {
+            document.execCommand('insertText', false, placeholder);
+        } else {
+            contentEditor.innerText += placeholder;
         }
     });
 
@@ -116,6 +192,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        syncContentToInput();
+        if (!contentInput.value) {
+            alert('請填寫合約內容');
+            e.preventDefault();
+            return;
+        }
         variablesJsonInput.value = JSON.stringify(variables);
     });
 });

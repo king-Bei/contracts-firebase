@@ -21,17 +21,19 @@
                     <table class="table table-hover align-middle">
                         <thead>
                             <tr>
-                                <th scope="col">客戶名稱</th>
+                                <th scope="col" style="min-width: 120px;">客戶名稱</th>
+                                <th scope="col" style="min-width: 160px;">範本名稱</th>
                                 <th scope="col">狀態</th>
                                 <th scope="col">建立日期</th>
-                                <th scope="col" style="width: 320px;">操作</th>
+                                <th scope="col" style="width: 360px;">操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             <% if (contracts && contracts.length > 0) { %>
                                 <% contracts.forEach(contract => { %>
                                     <tr>
-                                        <td><%= contract.customer_name || 'N/A' %></td>
+                                        <td><%= contract.client_name || contract.customer_name || 'N/A' %></td>
+                                        <td><%= contract.template_name || '-' %></td>
                                         <td>
                                             <!-- 根據狀態顯示不同顏色的標籤 -->
                                             <% if (contract.status === 'SIGNED') { %>
@@ -55,7 +57,9 @@
                                                 <form action="/sales/contracts/<%= contract.id %>/generate-link" method="POST" class="d-inline" onsubmit="return confirm('您確定要產生簽署連結嗎？產生後合約內容將無法修改。');">
                                                     <button type="submit" class="btn btn-sm btn-outline-success">發送簽署</button>
                                                 </form>
-                                                <form action="/sales/contracts/<%= contract.id %>/cancel" method="POST" class="d-inline" onsubmit="return confirm('您確定要作廢此合約草稿嗎？');">
+                                            <% } %>
+                                            <% if (contract.status !== 'SIGNED' && contract.status !== 'CANCELLED') { %>
+                                                <form action="/sales/contracts/<%= contract.id %>/cancel" method="POST" class="d-inline" onsubmit="return confirm('確定要作廢此合約嗎？');">
                                                     <button type="submit" class="btn btn-sm btn-outline-danger">作廢</button>
                                                 </form>
                                             <% } %>

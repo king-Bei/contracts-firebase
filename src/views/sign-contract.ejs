@@ -9,57 +9,84 @@
   <% } %>
 
   <div class="card shadow-sm mb-4">
-    <div class="card-header">
-      <strong><%= contract.template_name %></strong>
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>驗證碼驗證</strong>
+      <% if (isVerified) { %>
+        <span class="badge bg-success">已完成驗證</span>
+      <% } else { %>
+        <span class="badge bg-secondary">待驗證</span>
+      <% } %>
     </div>
     <div class="card-body">
-      <p class="mb-2"><strong>客戶名稱：</strong><%= contract.client_name || '-' %></p>
-      <% if (contract.status === 'SIGNED') { %>
-        <span class="badge bg-success">已簽署</span>
-      <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
-        <span class="badge bg-warning text-dark">待簽署</span>
+      <% if (!isVerified) { %>
+        <p class="text-muted mb-3">請先輸入驗證碼通過身份確認，通過後才會顯示完整合約內容與簽署區域。</p>
+        <form method="POST" action="/contracts/sign/<%= signingToken %>/verify" class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">驗證碼</label>
+            <input type="text" name="verification_code" class="form-control" required maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code">
+          </div>
+          <div class="col-md-6 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary">送出驗證碼</button>
+          </div>
+        </form>
+      <% } else { %>
+        <div class="alert alert-success mb-0">此裝置已完成驗證，您可以檢視與簽署合約。</div>
       <% } %>
     </div>
   </div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header">合約內容</div>
-    <div class="card-body">
-      <div class="border rounded p-3 bg-light" style="white-space: pre-wrap;">
-        <%- previewContent %>
+  <% if (isVerified) { %>
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">
+        <strong><%= contract.template_name %></strong>
       </div>
-    </div>
-  </div>
-
-  <% if (contract.status === 'PENDING_SIGNATURE') { %>
-    <div class="card shadow-sm">
-      <div class="card-header">簽署確認</div>
       <div class="card-body">
-        <form method="POST" action="" onsubmit="return handleSubmit();">
-          <div class="mb-3">
-            <label class="form-label">驗證碼</label>
-            <input type="text" name="verification_code" class="form-control" required maxlength="6" pattern="\\d{6}">
-          </div>
-          <div class="form-check mb-3">
-            <input class="form-check-input" type="checkbox" value="on" id="agree_terms" name="agree_terms" required>
-            <label class="form-check-label" for="agree_terms">我已閱讀並同意個資保護條款</label>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">簽名</label>
-            <div class="border rounded" style="height: 220px;">
-              <canvas id="signature-pad" class="w-100 h-100"></canvas>
-            </div>
-            <div class="mt-2 d-flex gap-2">
-              <button class="btn btn-sm btn-outline-secondary" type="button" id="clear-signature">清除簽名</button>
-            </div>
-            <input type="hidden" name="signature_data" id="signature_data">
-          </div>
-
-          <button type="submit" class="btn btn-primary">送出簽署</button>
-        </form>
+        <p class="mb-2"><strong>客戶名稱：</strong><%= contract.client_name || '-' %></p>
+        <% if (contract.status === 'SIGNED') { %>
+          <span class="badge bg-success">已簽署</span>
+        <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
+          <span class="badge bg-warning text-dark">待簽署</span>
+        <% } %>
       </div>
     </div>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">合約內容</div>
+      <div class="card-body">
+        <div class="border rounded p-3 bg-light" style="white-space: pre-wrap;">
+          <%- previewContent %>
+        </div>
+      </div>
+    </div>
+
+    <% if (canSign) { %>
+      <div class="card shadow-sm">
+        <div class="card-header">簽署確認</div>
+        <div class="card-body">
+          <form method="POST" action="" onsubmit="return handleSubmit();">
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" value="on" id="agree_terms" name="agree_terms" required>
+              <label class="form-check-label" for="agree_terms">我已閱讀並同意<a href="/privacy" target="_blank" rel="noopener" class="ms-1">個資保護條款</a></label>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">簽名</label>
+              <div class="border rounded" style="height: 220px;">
+                <canvas id="signature-pad" class="w-100 h-100"></canvas>
+              </div>
+              <div class="mt-2 d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="clear-signature">清除簽名</button>
+              </div>
+              <input type="hidden" name="signature_data" id="signature_data">
+            </div>
+
+            <button type="submit" class="btn btn-primary">送出簽署</button>
+          </form>
+        </div>
+      </div>
+    <% } %>
+  <% } else { %>
+    <div class="alert alert-light border">驗證成功後會立即顯示合約內容與簽署區域。</div>
   <% } %>
 </div>
 

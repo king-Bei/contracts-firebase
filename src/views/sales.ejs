@@ -8,9 +8,16 @@
   </div>
 </div>
 
-<div class="mb-4">
+<div class="mb-4 d-flex flex-wrap gap-2">
   <a href="/sales/contracts/new" class="btn btn-primary">＋ 新增合約</a>
+  <a href="/sales/contracts/bulk" class="btn btn-outline-primary">批次新增合約</a>
 </div>
+
+<% if (flashMessage) { %>
+  <div class="alert alert-success" role="alert">
+    <%= flashMessage %>
+  </div>
+<% } %>
 
 <form class="card shadow-sm mb-4" method="GET" action="/sales">
   <div class="card-body">

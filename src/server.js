@@ -369,6 +369,9 @@ app.get('/sales', checkAuth, async (req, res) => {
     return res.status(403).send('權限不足');
   }
   try {
+    const flashMessage = req.session.flashMessage || null;
+    delete req.session.flashMessage;
+
     const { start_date, end_date, status } = req.query;
     const defaultStart = new Date();
     defaultStart.setMonth(defaultStart.getMonth() - 3);
@@ -387,6 +390,7 @@ app.get('/sales', checkAuth, async (req, res) => {
       title: '業務員儀表板',
       contracts,
       user: req.session.user,
+      flashMessage,
       filters: {
         start_date: startDate.toISOString().slice(0, 10),
         end_date: endDate.toISOString().slice(0, 10),
@@ -407,6 +411,97 @@ app.get('/sales/contracts/new', checkAuth, async (req, res) => {
   } catch (error) {
     console.error('Failed to load new contract page:', error);
     res.status(500).send('無法載入新增合約頁面');
+  }
+});
+
+// 批次新增合約頁面
+app.get('/sales/contracts/bulk', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  try {
+    const templates = await contractTemplateModel.findAllActive();
+    const flashMessage = req.session.flashMessage || null;
+    delete req.session.flashMessage;
+
+    res.render('sales/bulk-contracts', {
+      title: '批次新增合約',
+      templates,
+      user: req.session.user,
+      flashMessage,
+    });
+  } catch (error) {
+    console.error('Failed to load bulk contract page:', error);
+    res.status(500).send('無法載入批次新增合約頁面');
+  }
+});
+
+// 處理批次新增合約
+app.post('/sales/contracts/bulk', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  try {
+    const templateId = parseInt(req.body.template_id, 10);
+    if (isNaN(templateId)) {
+      req.session.flashMessage = '請選擇一個有效的範本後再送出。';
+      return res.redirect('/sales/contracts/bulk');
+    }
+
+    const template = await contractTemplateModel.findById(templateId);
+    if (!template || !template.is_active) {
+      req.session.flashMessage = '此範本無法使用，請重新選擇。';
+      return res.redirect('/sales/contracts/bulk');
+    }
+
+    let entries = req.body.entries || [];
+    if (!Array.isArray(entries)) {
+      entries = Object.values(entries);
+    }
+
+    const validEntries = entries
+      .map(entry => entry || {})
+      .filter(entry => typeof entry.client_name === 'string' && entry.client_name.trim().length > 0);
+
+    if (!validEntries.length) {
+      req.session.flashMessage = '請至少填寫一位客戶名稱。';
+      return res.redirect('/sales/contracts/bulk');
+    }
+
+    let successCount = 0;
+    const failedClients = [];
+
+    for (const entry of validEntries) {
+      const variableValues = typeof entry.variables === 'object' ? entry.variables : {};
+      try {
+        await contractModel.create({
+          salesperson_id: req.session.user.id,
+          template_id: templateId,
+          client_name: entry.client_name.trim(),
+          variable_values: variableValues,
+        });
+        successCount++;
+      } catch (err) {
+        console.error('Failed to create contract in bulk:', err);
+        failedClients.push(entry.client_name.trim());
+      }
+    }
+
+    const messages = [];
+    if (successCount) {
+      messages.push(`成功建立 ${successCount} 份合約`);
+    }
+    if (failedClients.length) {
+      messages.push(`未能建立：${failedClients.join(', ')}`);
+    }
+
+    req.session.flashMessage = messages.join('；') || '批次建立已完成';
+    res.redirect('/sales');
+  } catch (error) {
+    console.error('Failed to process bulk contract creation:', error);
+    res.status(500).send('批次建立合約時發生錯誤');
   }
 });
 

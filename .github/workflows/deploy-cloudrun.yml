@@ -1,0 +1,54 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
+  REGION: ${{ secrets.GCP_REGION }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="gcr.io/${PROJECT_ID}/${SERVICE}:$GITHUB_SHA"
+          gcloud builds submit --tag "$IMAGE" .
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+        id: build
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ steps.build.outputs.image }}
+          allow-unauthenticated: true
+
+      - name: Output service URL
+        run: echo "Service URL: ${{ steps.deploy.outputs.url }}"

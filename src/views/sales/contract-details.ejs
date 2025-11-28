@@ -66,6 +66,22 @@
         </div>
       </div>
     </div>
+
+    <div class="card shadow-sm mt-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>發送簽署訊息</strong>
+        <small class="text-muted">可自行修改內容</small>
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-2">可複製以下文字貼給客戶，含短連結與驗證碼。</p>
+        <textarea class="form-control" id="share-message" rows="4" placeholder="輸入要傳送給客戶的內容"></textarea>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button type="button" class="btn btn-outline-secondary" id="reset-message">重設訊息</button>
+          <button type="button" class="btn btn-primary" id="copy-message">複製訊息</button>
+        </div>
+        <div class="form-text mt-2">預設訊息會自動帶入客戶姓名、範本名稱、短連結與驗證碼。</div>
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-7">
@@ -87,6 +103,22 @@
 <script>
   const copyShortLinkBtn = document.getElementById('copy-short-share-link');
   const copyCodeBtn = document.getElementById('copy-code');
+  const shareMessageInput = document.getElementById('share-message');
+  const resetMessageBtn = document.getElementById('reset-message');
+  const copyMessageBtn = document.getElementById('copy-message');
+
+  function buildDefaultMessage() {
+    const name = <%- JSON.stringify(contract.client_name || '客戶') %>;
+    const templateName = <%- JSON.stringify(contract.template_name) %>;
+    const shortLink = <%- JSON.stringify(shortShareLink) %>;
+    const code = <%- JSON.stringify(plaintextCode || '') %>;
+    const codeLine = code ? `驗證碼：${code}` : '驗證碼請向我索取';
+    return `親愛的${name}，這是您的「${templateName}」簽署連結：${shortLink}\n${codeLine}`;
+  }
+
+  if (shareMessageInput) {
+    shareMessageInput.value = buildDefaultMessage();
+  }
 
   if (copyShortLinkBtn) {
     copyShortLinkBtn.addEventListener('click', async () => {
@@ -109,6 +141,30 @@
         setTimeout(() => copyCodeBtn.textContent = '複製驗證碼', 1500);
       } catch (e) {
         alert('無法複製，請手動選取驗證碼。');
+      }
+    });
+  }
+
+  if (resetMessageBtn && shareMessageInput) {
+    resetMessageBtn.addEventListener('click', () => {
+      shareMessageInput.value = buildDefaultMessage();
+      shareMessageInput.focus();
+    });
+  }
+
+  if (copyMessageBtn && shareMessageInput) {
+    copyMessageBtn.addEventListener('click', async () => {
+      const text = shareMessageInput.value?.trim();
+      if (!text) {
+        alert('請先輸入要傳送的訊息內容。');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        copyMessageBtn.textContent = '已複製';
+        setTimeout(() => copyMessageBtn.textContent = '複製訊息', 1500);
+      } catch (e) {
+        alert('無法複製，請手動選取文字。');
       }
     });
   }

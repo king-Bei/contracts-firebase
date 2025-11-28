@@ -52,6 +52,17 @@ async function findById(id) {
 }
 
 /**
+ * 查找使用者並包含密碼雜湊（用於變更密碼）。
+ * @param {number} id
+ * @returns {object|null}
+ */
+async function findByIdWithPassword(id) {
+  const queryText = 'SELECT id, employee_id, role, name, is_active, password_hash FROM users WHERE id = $1';
+  const { rows } = await db.query(queryText, [id]);
+  return rows[0] || null;
+}
+
+/**
  * 建立新使用者 (主要由管理員使用)。
  * @param {object} userData - 包含 employee_id, password, role, name 的物件。
  * @returns {object} - 新建立的使用者物件 (不含密碼)。
@@ -116,13 +127,34 @@ async function deactivate(id) {
   return rows[0] || null;
 }
 
+/**
+ * 更新使用者密碼。
+ * @param {number} id
+ * @param {string} newPassword
+ * @returns {object|null}
+ */
+async function updatePassword(id, newPassword) {
+  const salt = await bcrypt.genSalt(10);
+  const password_hash = await bcrypt.hash(newPassword, salt);
+  const queryText = `
+    UPDATE users
+    SET password_hash = $1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2
+    RETURNING id, employee_id, role, name, is_active;
+  `;
+  const { rows } = await db.query(queryText, [password_hash, id]);
+  return rows[0] || null;
+}
 
 module.exports = {
   createUsersTable,
   findByEmployeeId,
   findById,
+  findByIdWithPassword,
   create,
   findAll,
   update,
   deactivate,
+  updatePassword,
 };

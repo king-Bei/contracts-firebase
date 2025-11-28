@@ -4,6 +4,7 @@
   <h1>我的合約</h1>
   <div>
     <span>你好, <%= user.full_name || user.name %></span>
+    <a href="/sales/password" class="btn btn-outline-primary btn-sm ms-2">變更密碼</a>
     <a href="/logout" class="btn btn-secondary btn-sm ms-2">登出</a>
   </div>
 </div>
@@ -58,7 +59,7 @@
         <thead>
           <tr>
             <th style="min-width: 120px;">客戶名稱</th>
-            <th style="min-width: 160px;">範本名稱</th>
+            <th style="min-width: 160px;">合約屬性</th>
             <th>狀態</th>
             <th>建立日期</th>
             <th style="width: 360px;">操作</th>

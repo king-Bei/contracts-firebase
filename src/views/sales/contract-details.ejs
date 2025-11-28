@@ -17,7 +17,7 @@
       </div>
       <div class="card-body">
         <p class="mb-2"><strong>客戶名稱：</strong><%= contract.client_name || '-' %></p>
-        <p class="mb-2"><strong>範本：</strong><%= contract.template_name %></p>
+        <p class="mb-2"><strong>合約：</strong><%= contract.template_name %></p>
         <p class="mb-2"><strong>狀態：</strong>
           <% if (contract.status === 'SIGNED') { %>
             <span class="badge bg-success">已簽署</span>
@@ -79,7 +79,7 @@
           <button type="button" class="btn btn-outline-secondary" id="reset-message">重設訊息</button>
           <button type="button" class="btn btn-primary" id="copy-message">複製訊息</button>
         </div>
-        <div class="form-text mt-2">預設訊息會自動帶入客戶姓名、範本名稱、短連結與驗證碼。</div>
+        <div class="form-text mt-2">預設訊息會自動帶入客戶姓名、合約、短連結與驗證碼。</div>
       </div>
     </div>
   </div>

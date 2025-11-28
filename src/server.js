@@ -354,7 +354,7 @@ app.post('/admin/templates/:id/toggle', checkAuth, checkAdmin, async (req, res) 
 
 function convertToCSV(data) {
   if (!data || data.length === 0) {
-    return 'ID,狀態,客戶名稱,簽署日期,建立日期,業務員,範本名稱\n';
+    return 'ID,狀態,客戶名稱,簽署日期,建立日期,業務員,合約屬性\n';
   }
   const headers = Object.keys(data[0]);
   const rows = data.map(row => 
@@ -411,6 +411,67 @@ app.get('/sales/contracts/new', checkAuth, async (req, res) => {
   } catch (error) {
     console.error('Failed to load new contract page:', error);
     res.status(500).send('無法載入新增合約頁面');
+  }
+});
+
+// 業務員變更密碼頁面
+app.get('/sales/password', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  const flash = req.session.passwordFlash || null;
+  delete req.session.passwordFlash;
+
+  res.render('sales/change-password', {
+    title: '變更密碼',
+    user: req.session.user,
+    flash,
+  });
+});
+
+// 處理業務員變更密碼
+app.post('/sales/password', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  const { current_password, new_password, confirm_password } = req.body;
+
+  if (!current_password || !new_password || !confirm_password) {
+    req.session.passwordFlash = { type: 'danger', message: '請完整填寫目前密碼與新密碼。' };
+    return res.redirect('/sales/password');
+  }
+
+  if (new_password !== confirm_password) {
+    req.session.passwordFlash = { type: 'warning', message: '兩次輸入的新密碼不一致。' };
+    return res.redirect('/sales/password');
+  }
+
+  if (new_password.length < 8) {
+    req.session.passwordFlash = { type: 'warning', message: '新密碼長度需至少 8 碼。' };
+    return res.redirect('/sales/password');
+  }
+
+  try {
+    const user = await userModel.findByIdWithPassword(req.session.user.id);
+    if (!user || !user.is_active) {
+      req.session.passwordFlash = { type: 'danger', message: '帳號狀態異常，請聯繫管理員。' };
+      return res.redirect('/sales/password');
+    }
+
+    const isMatch = await bcrypt.compare(current_password, user.password_hash);
+    if (!isMatch) {
+      req.session.passwordFlash = { type: 'danger', message: '目前密碼驗證失敗。' };
+      return res.redirect('/sales/password');
+    }
+
+    await userModel.updatePassword(user.id, new_password);
+    req.session.passwordFlash = { type: 'success', message: '密碼已更新，請使用新密碼登入。' };
+    res.redirect('/sales/password');
+  } catch (error) {
+    console.error('Failed to update password:', error);
+    res.status(500).send('無法更新密碼');
   }
 });
 

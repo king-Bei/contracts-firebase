@@ -71,6 +71,50 @@ async function findAll() {
   return rows;
 }
 
+/**
+ * 取得全站合約，並依條件篩選
+ */
+async function findAllWithFilters({ salespersonId, startDate, endDate, status } = {}) {
+  const conditions = ['1=1'];
+  const values = [];
+  let idx = 1;
+
+  if (salespersonId) {
+    conditions.push(`c.salesperson_id = $${idx++}`);
+    values.push(salespersonId);
+  }
+  if (startDate) {
+    conditions.push(`c.created_at >= $${idx++}`);
+    values.push(startDate);
+  }
+  if (endDate) {
+    conditions.push(`c.created_at <= $${idx++}`);
+    values.push(endDate);
+  }
+  if (status && status !== 'ALL') {
+    conditions.push(`c.status = $${idx++}`);
+    values.push(status);
+  }
+
+  const queryText = `
+    SELECT
+      c.id,
+      c.status,
+      c.client_name,
+      c.signed_at,
+      c.created_at,
+      u.name as salesperson_name,
+      ct.name as template_name
+    FROM contracts c
+    LEFT JOIN users u ON c.salesperson_id = u.id
+    LEFT JOIN contract_templates ct ON c.template_id = ct.id
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY c.created_at DESC;
+  `;
+  const { rows } = await db.query(queryText, values);
+  return rows;
+}
+
 
 /**
  * 建立一份新合約
@@ -130,11 +174,14 @@ async function findById(id) {
       c.signed_at,
       c.created_at,
       c.salesperson_id,
+      u.name as salesperson_name,
       ct.name as template_name,
       ct.content as template_content,
-      ct.variables as template_variables
+      ct.variables as template_variables,
+      ct.logo_url as template_logo_url
     FROM contracts c
     JOIN contract_templates ct ON c.template_id = ct.id
+    LEFT JOIN users u ON c.salesperson_id = u.id
     WHERE c.id = $1;
   `;
   const { rows } = await db.query(queryText, [id]);
@@ -159,7 +206,8 @@ async function findByToken(token) {
       c.signature_image,
       c.signed_at,
       ct.name as template_name,
-      ct.content as template_content
+      ct.content as template_content,
+      ct.logo_url as template_logo_url
     FROM contracts c
     JOIN contract_templates ct ON c.template_id = ct.id
     WHERE c.signing_link_token = $1;
@@ -271,6 +319,7 @@ module.exports = {
   create,
   findById,
   findBySalesperson,
+  findAllWithFilters,
   findByToken,
   findByShortCode,
   markAsSigned,

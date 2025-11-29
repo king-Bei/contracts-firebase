@@ -1,0 +1,212 @@
+<%- include('partials/header') %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h4 mb-1">合約檢視</h1>
+    <p class="text-muted mb-0">合約 ID：<%= contract.id %></p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/admin" class="btn btn-outline-secondary">返回列表</a>
+    <a href="<%= shareLink %>" class="btn btn-outline-primary" target="_blank" rel="noopener">開啟簽署頁</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">
+        <strong>合約資訊</strong>
+      </div>
+      <div class="card-body">
+        <p class="mb-2"><strong>客戶名稱：</strong><%= contract.client_name || '-' %></p>
+        <p class="mb-2"><strong>合約屬性：</strong><%= contract.template_name %></p>
+        <p class="mb-2"><strong>負責業務：</strong><%= contract.salesperson_name || '-' %></p>
+        <p class="mb-2"><strong>狀態：</strong>
+          <% if (contract.status === 'SIGNED') { %>
+            <span class="badge bg-success">已簽署</span>
+          <% } else if (contract.status === 'PENDING_SIGNATURE') { %>
+            <span class="badge bg-warning text-dark">待簽署</span>
+          <% } else if (contract.status === 'DRAFT') { %>
+            <span class="badge bg-secondary">草稿</span>
+          <% } else if (contract.status === 'CANCELLED') { %>
+            <span class="badge bg-danger">已作廢</span>
+          <% } else { %>
+            <span class="badge bg-light text-dark"><%= contract.status %></span>
+          <% } %>
+        </p>
+        <p class="mb-2"><strong>建立時間：</strong><%= new Date(contract.created_at).toLocaleString() %></p>
+        <% if (contract.signed_at) { %>
+          <p class="mb-0"><strong>簽署時間：</strong><%= new Date(contract.signed_at).toLocaleString() %></p>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>簽署資訊</strong>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">簽署短連結</label>
+          <div class="input-group">
+            <input type="text" readonly class="form-control" id="short-share-link" value="<%= shortShareLink %>">
+            <button class="btn btn-outline-primary" type="button" id="copy-short-share-link">複製</button>
+          </div>
+          <div class="form-text">完整網址：<code><%= shareLink %></code></div>
+        </div>
+        <div class="alert alert-secondary mb-0">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <strong>客戶驗證碼：</strong> <kbd><%= contract.verification_code_plaintext || 'N/A' %></kbd>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="copy-code" <%= contract.verification_code_plaintext ? '' : 'disabled' %>>複製驗證碼</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% if (contract.signature_image) { %>
+      <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <strong>簽名憑證</strong>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="print-contract">列印</button>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="download-pdf">下載完整 PDF</button>
+            <a class="btn btn-sm btn-outline-success" href="<%= contract.signature_image %>" download="contract-<%= contract.id %>-signature.png">下載簽名圖檔</a>
+          </div>
+        </div>
+        <div class="card-body text-center">
+          <img src="<%= contract.signature_image %>" alt="簽名圖片" class="img-fluid border rounded" style="max-height: 220px;">
+          <% if (contract.signed_at) { %>
+            <div class="text-muted small mt-2">簽署時間：<%= new Date(contract.signed_at).toLocaleString() %></div>
+          <% } %>
+        </div>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card shadow-sm" id="admin-contract-preview-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>合約內容</strong>
+        <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-primary" href="/admin/contracts/<%= contract.id %>/pdf" target="_blank" rel="noopener">下載完整 PDF</a>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="print-preview">列印</button>
+        </div>
+      </div>
+      <div class="card-body" id="admin-contract-preview">
+        <% if (contract.template_logo_url) { %>
+          <div class="text-center mb-3">
+            <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid" style="max-height: 80px;">
+          </div>
+        <% } %>
+        <div class="border rounded p-3 bg-light" style="min-height: 240px; max-height: 520px; overflow: auto; white-space: pre-wrap;">
+          <%- previewContent %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+  const copyShortLinkBtn = document.getElementById('copy-short-share-link');
+  const copyCodeBtn = document.getElementById('copy-code');
+
+  async function copyTextFromInput(el, button, defaultLabel) {
+    if (!el || !button) return;
+    try {
+      await navigator.clipboard.writeText(el.value);
+      button.textContent = '已複製';
+      setTimeout(() => button.textContent = defaultLabel, 1500);
+    } catch (e) {
+      alert('無法複製，請手動選取文字。');
+    }
+  }
+
+  if (copyShortLinkBtn) {
+    copyShortLinkBtn.addEventListener('click', () => {
+      const input = document.getElementById('short-share-link');
+      copyTextFromInput(input, copyShortLinkBtn, '複製');
+    });
+  }
+
+  if (copyCodeBtn) {
+    copyCodeBtn.addEventListener('click', () => {
+      const code = '<%= contract.verification_code_plaintext || "" %>';
+      navigator.clipboard.writeText(code).then(() => {
+        copyCodeBtn.textContent = '已複製';
+        setTimeout(() => copyCodeBtn.textContent = '複製驗證碼', 1500);
+      }).catch(() => alert('無法複製，請手動選取文字。'));
+    });
+  }
+
+  function prepareClone(element) {
+    const clone = element.cloneNode(true);
+    clone.style.maxHeight = 'none';
+    clone.style.overflow = 'visible';
+    clone.style.position = 'absolute';
+    clone.style.left = '-9999px';
+    clone.style.top = '0';
+    clone.style.width = `${element.scrollWidth || element.offsetWidth}px`;
+    clone.style.height = `${element.scrollHeight || element.offsetHeight}px`;
+    const scrollable = clone.querySelector('.border');
+    if (scrollable) {
+      scrollable.style.maxHeight = 'none';
+      scrollable.style.overflow = 'visible';
+      scrollable.style.height = 'auto';
+      scrollable.style.width = `${scrollable.scrollWidth || scrollable.offsetWidth}px`;
+    }
+    document.body.appendChild(clone);
+    return clone;
+  }
+
+  async function downloadPdf(elementId, filename) {
+    const wrapper = document.getElementById(elementId);
+    if (!wrapper) return;
+    const scrollable = wrapper.querySelector('.border') || wrapper;
+    const clone = prepareClone(scrollable);
+    const canvas = await html2canvas(clone, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      scrollY: -window.scrollY,
+    });
+    clone.remove();
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p', 'pt', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgProps = pdf.getImageProperties(imgData);
+    const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
+    const imgWidth = imgProps.width * ratio;
+    const imgHeight = imgProps.height * ratio;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(filename);
+  }
+
+  const downloadButtons = document.querySelectorAll('#download-pdf, #download-pdf-top');
+  downloadButtons.forEach(btn => {
+    btn?.addEventListener('click', () => downloadPdf('admin-contract-preview-card', `contract-${'<%= contract.id %>'}.pdf`));
+  });
+
+  document.getElementById('print-contract')?.addEventListener('click', () => window.print());
+  document.getElementById('print-preview')?.addEventListener('click', () => window.print());
+</script>
+
+<%- include('partials/footer') %>

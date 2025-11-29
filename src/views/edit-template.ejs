@@ -12,13 +12,22 @@
                 </div>
 
                 <div class="mb-3">
+                    <label for="logo_url" class="form-label">公司 LOGO 圖片網址（選填）</label>
+                    <input type="url" class="form-control" id="logo_url" name="logo_url" value="<%= template.logo_url || '' %>" placeholder="https://example.com/logo.png">
+                    <div class="form-text">設定後會顯示於合約預覽與簽署頁面頂部。</div>
+                </div>
+
+                <div class="mb-3">
                     <label for="content" class="form-label">合約內容</label>
                     <p class="form-text">
-                        使用 <code>{{variable_key}}</code> 格式插入變數（例：<code>{{client_name}}</code>）。可直接編輯或上傳檔案填入內容。
+                        使用 <code>{{variable_key}}</code> 格式插入變數（例：<code>{{client_name}}</code>）。可直接編輯或上傳檔案填入內容，亦可插入圖片。
                     </p>
                     <div class="d-flex flex-column flex-md-row gap-2 mb-2">
                         <input type="file" accept=".txt,.html,.htm" class="form-control" id="content-upload">
-                        <button type="button" class="btn btn-outline-secondary" id="detect-variables">從內容偵測變數</button>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-outline-secondary" id="detect-variables">從內容偵測變數</button>
+                            <button type="button" class="btn btn-outline-primary" id="insert-image">插入圖片</button>
+                        </div>
                     </div>
                     <div id="content-editor" class="form-control bg-light" style="min-height: 280px;" contenteditable="true"></div>
                     <textarea class="d-none" id="content" name="content" required><%= template.content %></textarea>
@@ -27,19 +36,27 @@
                 <div class="mb-3">
                     <h5 class="mt-4">範本變數</h5>
                     <p class="form-text">
-                        變數名稱建議使用英數與底線 (例：client_name)，顯示標籤則為給使用者看的中文說明。
+                        變數名稱建議使用英數與底線 (例：client_name)，顯示標籤則為給使用者看的中文說明，可依需求選擇輸入型態（單行、多行或勾選）。
                     </p>
                     <div id="variables-container">
                         <% if (variables && variables.length > 0) { %>
                             <% variables.forEach((variable, index) => { %>
                                 <div class="row mb-2 g-2">
-                                    <div class="col-md-5">
+                                    <div class="col-md-4">
                                         <input type="text" class="form-control" placeholder="變數名稱" name="var_key_<%= index %>" value="<%= variable.key %>" required>
                                     </div>
-                                    <div class="col-md-5">
+                                    <div class="col-md-4">
                                         <input type="text" class="form-control" placeholder="顯示標籤" name="var_label_<%= index %>" value="<%= variable.label %>" required>
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-3">
+                                        <select class="form-select" name="var_type_<%= index %>">
+                                            <% const vType = (variable.type || 'text').toLowerCase(); %>
+                                            <option value="text" <%= vType === 'text' ? 'selected' : '' %>>單行文字</option>
+                                            <option value="textarea" <%= vType === 'textarea' ? 'selected' : '' %>>多行文字</option>
+                                            <option value="checkbox" <%= vType === 'checkbox' ? 'selected' : '' %>>勾選</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-1">
                                         <button type="button" class="btn btn-danger w-100 remove-variable">移除</button>
                                     </div>
                                 </div>
@@ -71,17 +88,24 @@
 <script>
 let variableCount = <%= variables?.length || 0 %>;
 
-function buildRow(key = '', label = '') {
+function buildRow(key = '', label = '', type = 'text') {
     const row = document.createElement('div');
     row.classList.add('row', 'mb-2', 'g-2');
     row.innerHTML = `
-        <div class="col-md-5">
+        <div class="col-md-4">
             <input type="text" class="form-control" placeholder="變數名稱" name="var_key_${variableCount}" value="${key}" required>
         </div>
-        <div class="col-md-5">
+        <div class="col-md-4">
             <input type="text" class="form-control" placeholder="顯示標籤" name="var_label_${variableCount}" value="${label}" required>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
+            <select class="form-select" name="var_type_${variableCount}">
+                <option value="text" ${type === 'text' ? 'selected' : ''}>單行文字</option>
+                <option value="textarea" ${type === 'textarea' ? 'selected' : ''}>多行文字</option>
+                <option value="checkbox" ${type === 'checkbox' ? 'selected' : ''}>勾選</option>
+            </select>
+        </div>
+        <div class="col-md-1">
             <button type="button" class="btn btn-danger w-100 remove-variable">移除</button>
         </div>
     `;
@@ -99,9 +123,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadInput = document.getElementById('content-upload');
     const detectButton = document.getElementById('detect-variables');
     const insertPlaceholderButton = document.getElementById('insert-placeholder');
+    const insertImageButton = document.getElementById('insert-image');
 
     // 初始化編輯器內容
-    contentEditor.innerText = contentInput.value || '';
+    function setEditorContent(html) {
+        contentEditor.innerHTML = html || '';
+    }
+
+    function getEditorContent() {
+        return (contentEditor.innerHTML || '').trim();
+    }
+
+    setEditorContent(contentInput.value || '');
 
     addVariableButton.addEventListener('click', () => {
         variablesContainer.appendChild(buildRow());
@@ -118,13 +151,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (evt) => {
-            contentEditor.innerText = evt.target?.result || '';
+            const result = evt.target?.result || '';
+            const isHtml = (file.type && file.type.includes('html')) || /\.html?$/i.test(file.name || '');
+            if (isHtml) {
+                setEditorContent(result);
+            } else {
+                contentEditor.innerText = result;
+            }
         };
         reader.readAsText(file);
     });
 
     function syncContentToInput() {
-        contentInput.value = (contentEditor.innerText || '').trim();
+        contentInput.value = getEditorContent();
     }
 
     function extractPlaceholders(text) {
@@ -133,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     detectButton.addEventListener('click', () => {
-        const placeholders = extractPlaceholders(contentEditor.innerText || '');
+        const placeholders = extractPlaceholders(getEditorContent());
         if (!placeholders.length) {
             alert('未找到符合 {{placeholder}} 格式的變數。');
             return;
@@ -173,14 +212,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    insertImageButton.addEventListener('click', () => {
+        const url = prompt('請輸入圖片網址');
+        if (!url) return;
+        const alt = prompt('圖片說明（選填）') || '';
+        const imgTag = `<img src="${url}" alt="${alt}" style="max-width: 100%;">`;
+        contentEditor.focus();
+        if (document.execCommand) {
+            document.execCommand('insertHTML', false, imgTag);
+        } else {
+            contentEditor.innerHTML += imgTag;
+        }
+    });
+
     form.addEventListener('submit', (e) => {
         const variables = [];
         const rows = variablesContainer.querySelectorAll('.row');
         for (const row of rows) {
             const keyInput = row.querySelector('input[name^="var_key_"]');
             const labelInput = row.querySelector('input[name^="var_label_"]');
+            const typeInput = row.querySelector('select[name^="var_type_"]');
             const key = keyInput?.value.trim();
             const label = labelInput?.value.trim();
+            const type = (typeInput?.value || 'text').toLowerCase();
 
             if (key && label) {
                 if (!/^[a-zA-Z0-9_]+$/.test(key)) {
@@ -188,7 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     e.preventDefault();
                     return;
                 }
-                variables.push({ key, label });
+                const normalizedType = ['text', 'textarea', 'checkbox'].includes(type) ? type : 'text';
+                variables.push({ key, label, type: normalizedType });
             }
         }
 

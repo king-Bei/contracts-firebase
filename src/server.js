@@ -5,9 +5,12 @@ if (process.env.NODE_ENV !== 'production') {
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
+const https = require('https');
+const PDFDocument = require('pdfkit');
 
 const userModel = require('./models/userModel');
 const contractTemplateModel = require('./models/contractTemplateModel');
@@ -63,7 +66,8 @@ const checkAdmin = (req, res, next) => {
   }
 };
 
-const renderTemplateWithVariables = (content, variables = {}) => {
+const renderTemplateWithVariables = (content, variables = {}, options = {}) => {
+  const { wrapBold = false, signatureImage = null, signaturePlaceholder = '簽署欄位' } = options;
   let filled = content || '';
   let parsedVariables = variables;
 
@@ -75,11 +79,216 @@ const renderTemplateWithVariables = (content, variables = {}) => {
     }
   }
 
-  Object.entries(parsedVariables || {}).forEach(([key, value]) => {
+  const mergedVariables = { ...(parsedVariables || {}) };
+  const signatureTag = signatureImage
+    ? `<div class="mt-2"><img src="${signatureImage}" alt="簽名圖片" style="max-height: 220px;"></div>`
+    : '';
+  if (signatureImage) {
+    mergedVariables[signaturePlaceholder] = signatureTag;
+  }
+
+  const hasSignaturePlaceholder = new RegExp(`{{\\s*${signaturePlaceholder}\\s*}}`).test(content || '');
+
+  Object.entries(mergedVariables || {}).forEach(([key, value]) => {
     const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-    filled = filled.replace(regex, value ?? '');
+    let displayValue = value;
+    if (typeof value === 'boolean') {
+      displayValue = value ? '已勾選' : '未勾選';
+    } else if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', 'yes', '1', 'on', '已勾選'].includes(normalized)) {
+        displayValue = '已勾選';
+      } else if (['false', '0', 'no', 'off', '未勾選'].includes(normalized)) {
+        displayValue = '未勾選';
+      }
+    } else if (Array.isArray(value)) {
+      displayValue = value.join(', ');
+    }
+
+    if (wrapBold && typeof displayValue === 'string' && !displayValue.trim().startsWith('<')) {
+      displayValue = `<strong>${displayValue}</strong>`;
+    }
+    filled = filled.replace(regex, displayValue ?? '');
   });
+
+  if (signatureImage && !hasSignaturePlaceholder) {
+    filled += `\n\n<div>簽署欄位：${signatureTag}</div>`;
+  }
+
   return filled;
+};
+
+const normalizeVariableValues = (rawValues, templateVariables = []) => {
+  const output = {};
+  const incoming = (rawValues && typeof rawValues === 'object') ? rawValues : {};
+  const definitions = Array.isArray(templateVariables) ? templateVariables : [];
+
+  definitions.forEach(variable => {
+    const key = variable.key || variable.name;
+    if (!key) return;
+    const type = (variable.type || 'text').toLowerCase();
+    const incomingValue = incoming[key];
+
+    if (type === 'checkbox') {
+      const normalized = Array.isArray(incomingValue) ? incomingValue : [incomingValue];
+      const checked = normalized.some(v => v === true || v === 'true' || v === 'on' || v === 1 || v === '1' || v === 'yes' || v === '已勾選');
+      output[key] = Boolean(checked);
+    } else {
+      output[key] = typeof incomingValue === 'string' ? incomingValue.trim() : (incomingValue ?? '');
+    }
+  });
+
+  // 保留未在範本定義的其他欄位
+  Object.entries(incoming).forEach(([key, value]) => {
+    if (!(key in output)) {
+      output[key] = value;
+    }
+  });
+
+  return output;
+};
+
+const fetchImageBuffer = (url) => {
+  return new Promise(resolve => {
+    if (!url) return resolve(null);
+
+    // data URL
+    if (url.startsWith('data:image')) {
+      const base64 = url.split(',')[1];
+      try {
+        return resolve(Buffer.from(base64, 'base64'));
+      } catch (err) {
+        return resolve(null);
+      }
+    }
+
+    try {
+      https.get(url, res => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return resolve(null);
+        }
+        const data = [];
+        res.on('data', chunk => data.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(data)));
+      }).on('error', () => resolve(null));
+    } catch (err) {
+      resolve(null);
+    }
+  });
+};
+
+const htmlToPlain = (html) => {
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
+const NOTO_SANS_TC_URL = 'https://fonts.gstatic.com/ea/notosanstc/v1/NotoSansTC-Regular.otf';
+const LOCAL_TCFONT_PATH = path.join(__dirname, '..', 'fonts', 'NotoSansTC-Regular.otf');
+let cachedTcFont = null;
+
+const fetchFontBuffer = (url) => {
+  return new Promise(resolve => {
+    if (!url) return resolve(null);
+    try {
+      https.get(url, res => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return resolve(null);
+        }
+        const data = [];
+        res.on('data', chunk => data.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(data)));
+      }).on('error', () => resolve(null));
+    } catch (err) {
+      resolve(null);
+    }
+  });
+};
+
+const getTraditionalChineseFont = async () => {
+  if (cachedTcFont) return cachedTcFont;
+  try {
+    if (fs.existsSync(LOCAL_TCFONT_PATH)) {
+      cachedTcFont = fs.readFileSync(LOCAL_TCFONT_PATH);
+      return cachedTcFont;
+    }
+  } catch (err) {
+    // ignore and fallback to remote
+  }
+  cachedTcFont = await fetchFontBuffer(NOTO_SANS_TC_URL);
+  return cachedTcFont;
+};
+
+const SIGN_PLACEHOLDER = '簽署欄位';
+
+const streamContractPdf = async (res, contract) => {
+  const doc = new PDFDocument({ margin: 50 });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="contract-${contract.id}.pdf"`);
+  doc.pipe(res);
+
+  const tcFont = await getTraditionalChineseFont();
+  if (tcFont) {
+    doc.registerFont('NotoTC', tcFont);
+    doc.font('NotoTC');
+  }
+
+  // 標頭資訊
+  if (contract.template_logo_url) {
+    const logoBuffer = await fetchImageBuffer(contract.template_logo_url);
+    if (logoBuffer) {
+      doc.image(logoBuffer, { fit: [220, 120], align: 'center' });
+      doc.moveDown();
+    }
+  }
+
+  doc.fontSize(16).text(contract.template_name || '合約', { underline: true });
+  doc.moveDown(0.5);
+  doc.fontSize(12).text(`客戶：${contract.client_name || '-'}`);
+  doc.text(`狀態：${contract.status}`);
+  if (contract.signed_at) {
+    doc.text(`簽署時間：${new Date(contract.signed_at).toLocaleString()}`);
+  }
+  doc.moveDown();
+
+  // 內容
+  const filledContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+    wrapBold: false,
+    signatureImage: null,
+    signaturePlaceholder: SIGN_PLACEHOLDER,
+  });
+  const plainContent = htmlToPlain(filledContent) || '（無內容）';
+
+  const parts = plainContent.split(SIGN_PLACEHOLDER);
+  const hasSignature = Boolean(contract.signature_image);
+  let sigBuffer = null;
+  if (hasSignature) {
+    sigBuffer = await fetchImageBuffer(contract.signature_image);
+  }
+
+  doc.fontSize(12);
+  parts.forEach((part, index) => {
+    doc.text(part || '');
+    const needsSignature = hasSignature && index < parts.length - 1;
+    if (needsSignature) {
+      doc.moveDown(0.5);
+      if (sigBuffer) {
+        doc.image(sigBuffer, { fit: [240, 160] });
+      } else {
+        doc.text('[簽名圖片無法取得]');
+      }
+      doc.moveDown(0.5);
+    }
+  });
+
+  doc.end();
 };
 
 const markContractVerified = (req, token) => {
@@ -167,11 +376,32 @@ app.get('/logout', (req, res) => {
 app.get('/admin', checkAuth, checkAdmin, async (req, res) => {
   try {
     const users = await userModel.findAll();
-    const contracts = await contractModel.findAll();
+    const { salesperson_id, start_date, end_date, status } = req.query;
+
+    const parsedSalespersonId = salesperson_id ? parseInt(salesperson_id, 10) : null;
+    const parsedStart = start_date ? new Date(start_date) : null;
+    const parsedEnd = end_date ? new Date(end_date) : null;
+    const normalizedStatus = status || 'ALL';
+
+    const contracts = await contractModel.findAllWithFilters({
+      salespersonId: !isNaN(parsedSalespersonId) ? parsedSalespersonId : null,
+      startDate: parsedStart && !isNaN(parsedStart) ? parsedStart : null,
+      endDate: parsedEnd && !isNaN(parsedEnd) ? parsedEnd : null,
+      status: normalizedStatus,
+    });
+
+    const salesUsers = users.filter(u => u.role === 'salesperson');
     res.render('admin', { 
       title: '管理員後台', 
       users: users,
-      contracts: contracts 
+      salesUsers,
+      contracts: contracts,
+      filters: {
+        salesperson_id: salesperson_id || '',
+        start_date: start_date || '',
+        end_date: end_date || '',
+        status: normalizedStatus,
+      },
     });
   } catch (error) {
     console.error('Failed to load admin page:', error);
@@ -283,12 +513,65 @@ app.get('/admin/templates/new', checkAuth, checkAdmin, async (req, res) => {
   res.render('new-template', { title: '建立新合約範本' });
 });
 
+// 管理員查看單一合約
+app.get('/admin/contracts/:id', checkAuth, checkAdmin, async (req, res) => {
+  try {
+    let contract = await contractModel.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).send('找不到合約');
+    }
+
+    if (!contract.short_link_code) {
+      const shortCode = await contractModel.ensureShortLinkCode(contract.id);
+      contract = { ...contract, short_link_code: shortCode };
+    }
+
+    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+      wrapBold: true,
+      signatureImage: contract.signature_image,
+    });
+    const fullShareLink = `${req.protocol}://${req.get('host')}/contracts/sign/${contract.signing_link_token}`;
+    const shortShareLink = `${req.protocol}://${req.get('host')}/s/${contract.short_link_code || contract.signing_link_token}`;
+
+    res.render('admin-contract-details', {
+      title: '合約檢視',
+      contract,
+      previewContent,
+      shareLink: fullShareLink,
+      shortShareLink,
+      user: req.session.user,
+    });
+  } catch (error) {
+    console.error('Failed to load admin contract view:', error);
+    res.status(500).send('無法載入合約資訊');
+  }
+});
+
+// 管理員下載合約 PDF
+app.get('/admin/contracts/:id/pdf', checkAuth, checkAdmin, async (req, res) => {
+  try {
+    const contract = await contractModel.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).send('找不到合約');
+    }
+    await streamContractPdf(res, contract);
+  } catch (error) {
+    console.error('Failed to download contract pdf (admin):', error);
+    res.status(500).send('無法產生 PDF');
+  }
+});
+
 app.post('/admin/templates/new', checkAuth, checkAdmin, async (req, res) => {
   try {
     const { name, content } = req.body;
     const variables = req.body.variables ? JSON.parse(req.body.variables) : [];
 
-    await contractTemplateModel.create({ name, content, variables });
+    await contractTemplateModel.create({
+      name,
+      content,
+      variables,
+      logo_url: req.body.logo_url?.trim() || null,
+    });
     res.redirect('/admin/templates');
   } catch (error) {
     console.error('Failed to create template:', error);
@@ -328,6 +611,7 @@ app.post('/admin/templates/edit/:id', checkAuth, checkAdmin, async (req, res) =>
       content: req.body.content,
       variables,
       is_active: req.body.is_active === 'on',
+      logo_url: req.body.logo_url?.trim() || null,
     });
 
     res.redirect('/admin/templates');
@@ -516,6 +800,12 @@ app.post('/sales/contracts/bulk', checkAuth, async (req, res) => {
       req.session.flashMessage = '此範本無法使用，請重新選擇。';
       return res.redirect('/sales/contracts/bulk');
     }
+    let templateVariables = [];
+    try {
+      templateVariables = Array.isArray(template.variables) ? template.variables : JSON.parse(template.variables || '[]');
+    } catch (err) {
+      templateVariables = [];
+    }
 
     let entries = req.body.entries || [];
     if (!Array.isArray(entries)) {
@@ -536,12 +826,13 @@ app.post('/sales/contracts/bulk', checkAuth, async (req, res) => {
 
     for (const entry of validEntries) {
       const variableValues = typeof entry.variables === 'object' ? entry.variables : {};
+      const normalizedVariables = normalizeVariableValues(variableValues, templateVariables);
       try {
         await contractModel.create({
           salesperson_id: req.session.user.id,
           template_id: templateId,
           client_name: entry.client_name.trim(),
-          variable_values: variableValues,
+          variable_values: normalizedVariables,
         });
         successCount++;
       } catch (err) {
@@ -573,11 +864,24 @@ app.post('/sales/contracts', checkAuth, async (req, res) => {
     const variables = typeof req.body.variables === 'object' ? req.body.variables : {};
     const salesperson_id = req.session.user.id;
 
+    const template = await contractTemplateModel.findById(template_id);
+    if (!template || !template.is_active) {
+      return res.status(400).send('此範本無法使用，請重新選擇。');
+    }
+
+    let templateVariables = [];
+    try {
+      templateVariables = Array.isArray(template.variables) ? template.variables : JSON.parse(template.variables || '[]');
+    } catch (err) {
+      templateVariables = [];
+    }
+    const normalizedVariables = normalizeVariableValues(variables, templateVariables);
+
     const contractData = {
       salesperson_id,
       template_id,
       client_name,
-      variable_values: variables || {},
+      variable_values: normalizedVariables || {},
     };
 
     const newContract = await contractModel.create(contractData);
@@ -654,9 +958,22 @@ app.post('/sales/contracts/:id/edit', checkAuth, async (req, res) => {
 
     const updatedVariables = typeof req.body.variables === 'object' ? req.body.variables : {};
 
+    let templateVariables = [];
+    try {
+      if (Array.isArray(contract.template_variables)) {
+        templateVariables = contract.template_variables;
+      } else if (contract.template_variables) {
+        templateVariables = JSON.parse(contract.template_variables || '[]');
+      }
+    } catch (err) {
+      templateVariables = [];
+    }
+
+    const normalizedVariables = normalizeVariableValues(updatedVariables, templateVariables);
+
     await contractModel.update(contract.id, {
       client_name: req.body.client_name,
-      variable_values: updatedVariables,
+      variable_values: normalizedVariables,
     });
 
     res.redirect(`/sales/contracts/${contract.id}`);
@@ -676,7 +993,10 @@ app.get('/contracts/sign/:token', async (req, res) => {
 
     const isVerified = isContractVerified(req, req.params.token);
     const previewContent = isVerified
-      ? renderTemplateWithVariables(contract.template_content, contract.variable_values)
+      ? renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+          wrapBold: true,
+          signatureImage: contract.signature_image,
+        })
       : null;
     const canSign = contract.status === 'PENDING_SIGNATURE';
 
@@ -709,6 +1029,23 @@ app.get('/contracts/sign/:token', async (req, res) => {
   }
 });
 
+// 公開下載 PDF（僅已簽署）
+app.get('/contracts/sign/:token/pdf', async (req, res) => {
+  try {
+    const contract = await contractModel.findByToken(req.params.token);
+    if (!contract) {
+      return res.status(404).send('簽署連結無效');
+    }
+    if (contract.status !== 'SIGNED') {
+      return res.status(400).send('合約尚未簽署，無法下載 PDF');
+    }
+    await streamContractPdf(res, contract);
+  } catch (error) {
+    console.error('Failed to download public contract pdf:', error);
+    res.status(500).send('無法產生 PDF');
+  }
+});
+
 // 驗證碼驗證
 app.post('/contracts/sign/:token/verify', async (req, res) => {
   try {
@@ -719,7 +1056,10 @@ app.post('/contracts/sign/:token/verify', async (req, res) => {
 
     const canSign = contract.status === 'PENDING_SIGNATURE';
     const previewContent = isContractVerified(req, req.params.token)
-      ? renderTemplateWithVariables(contract.template_content, contract.variable_values)
+      ? renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+          wrapBold: true,
+          signatureImage: contract.signature_image,
+        })
       : null;
 
     const { verification_code } = req.body;
@@ -769,7 +1109,10 @@ app.post('/contracts/sign/:token', async (req, res) => {
     const { agree_terms, signature_data } = req.body;
     const isVerified = isContractVerified(req, req.params.token);
     const previewContent = isVerified
-      ? renderTemplateWithVariables(contract.template_content, contract.variable_values)
+      ? renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+          wrapBold: true,
+          signatureImage: contract.signature_image,
+        })
       : null;
 
     if (!isVerified) {
@@ -864,7 +1207,10 @@ app.get('/sales/contracts/:id', checkAuth, async (req, res) => {
       contract = { ...contract, short_link_code: shortCode };
     }
 
-    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values);
+    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+      wrapBold: true,
+      signatureImage: contract.signature_image,
+    });
     const plaintextCode = contract.verification_code_plaintext || req.session.lastGeneratedCode || null;
     delete req.session.lastGeneratedCode;
 
@@ -883,6 +1229,30 @@ app.get('/sales/contracts/:id', checkAuth, async (req, res) => {
   } catch (error) {
     console.error('Failed to load contract details:', error);
     res.status(500).send('無法載入合約詳情');
+  }
+});
+
+// 業務員下載合約 PDF
+app.get('/sales/contracts/:id/pdf', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+  try {
+    let contract = await contractModel.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).send('找不到合約');
+    }
+    if (contract.salesperson_id !== req.session.user.id) {
+      return res.status(403).send('您無權下載此合約');
+    }
+    if (!contract.short_link_code) {
+      const shortCode = await contractModel.ensureShortLinkCode(contract.id);
+      contract = { ...contract, short_link_code: shortCode };
+    }
+    await streamContractPdf(res, contract);
+  } catch (error) {
+    console.error('Failed to download contract pdf:', error);
+    res.status(500).send('無法產生 PDF');
   }
 });
 

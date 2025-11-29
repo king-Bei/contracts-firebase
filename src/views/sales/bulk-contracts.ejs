@@ -31,7 +31,10 @@
           <div class="form-text">範本變數會套用到下方每一列客戶。</div>
         </div>
         <div class="col-lg-6 text-lg-end">
-          <button type="button" class="btn btn-outline-secondary" id="add-entry">新增一列客戶</button>
+          <div class="d-flex gap-2 justify-content-lg-end flex-wrap">
+            <button type="button" class="btn btn-outline-secondary" id="add-entry">新增一列客戶</button>
+            <button type="button" class="btn btn-outline-primary" id="copy-first-entry">同步第一列至其他</button>
+          </div>
         </div>
       </div>
 
@@ -58,6 +61,7 @@
   const templateSelect = document.getElementById('template-select');
   const entriesContainer = document.getElementById('entries-container');
   const addEntryButton = document.getElementById('add-entry');
+  const copyFirstButton = document.getElementById('copy-first-entry');
   const form = document.getElementById('bulk-form');
 
   let currentVariables = [];
@@ -76,11 +80,34 @@
     return currentVariables.map(variable => {
       const key = variable.key || variable.name;
       const label = variable.label || variable.name || '變數';
+      const type = (variable.type || 'text').toLowerCase();
       const safeKey = escapeAttr(key);
       const safeLabel = escapeAttr(label);
       const value = existingValues[key] || '';
       const safeValue = escapeAttr(value);
       const inputId = `entry-${entryId}-var-${safeKey}`;
+      const isChecked = value === true || value === 'true' || value === 'on' || value === '1' || value === 1 || value === '已勾選';
+
+      if (type === 'textarea') {
+        return `
+          <div class="col-md-6">
+            <label class="form-label" for="${inputId}">${safeLabel}</label>
+            <textarea class="form-control" id="${inputId}" name="entries[${entryId}][variables][${safeKey}]" rows="3">${safeValue}</textarea>
+          </div>
+        `;
+      }
+
+      if (type === 'checkbox') {
+        return `
+          <div class="col-md-6">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="${inputId}" name="entries[${entryId}][variables][${safeKey}]" value="on" ${isChecked ? 'checked' : ''}>
+              <label class="form-check-label" for="${inputId}">${safeLabel}</label>
+            </div>
+          </div>
+        `;
+      }
+
       return `
         <div class="col-md-6">
           <label class="form-label" for="${inputId}">${safeLabel}</label>
@@ -154,6 +181,39 @@
   }
 
   addEntryButton.addEventListener('click', () => addEntry());
+
+  function copyFirstEntryToOthers() {
+    const rows = Array.from(entriesContainer.querySelectorAll('[data-entry-id]'));
+    if (rows.length < 2) {
+      alert('請先新增至少兩列客戶資料。');
+      return;
+    }
+    const firstRow = rows[0];
+    const sourceName = firstRow.querySelector('input[name$="[client_name]"]')?.value || '';
+
+    rows.slice(1).forEach(row => {
+      const targetName = row.querySelector('input[name$="[client_name]"]');
+      if (targetName) {
+        targetName.value = sourceName;
+      }
+
+      const sourceFields = firstRow.querySelectorAll('input[name*="[variables]"], textarea[name*="[variables]"]');
+      sourceFields.forEach(field => {
+        const match = field.name.match(/\[variables]\[([^\]]+)]/);
+        if (!match) return;
+        const key = match[1];
+        const target = row.querySelector(`[name="entries[${row.dataset.entryId}][variables][${key}]"]`);
+        if (!target) return;
+        if (field.type === 'checkbox') {
+          target.checked = field.checked;
+        } else {
+          target.value = field.value;
+        }
+      });
+    });
+  }
+
+  copyFirstButton.addEventListener('click', copyFirstEntryToOthers);
 
   entriesContainer.addEventListener('click', (e) => {
     if (e.target.classList.contains('remove-entry')) {

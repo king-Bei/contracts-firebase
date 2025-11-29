@@ -50,10 +50,23 @@
       </div>
     </div>
 
-    <div class="card shadow-sm mb-4">
-      <div class="card-header">合約內容</div>
-      <div class="card-body">
-        <div class="border rounded p-3 bg-light" style="white-space: pre-wrap;">
+    <div class="card shadow-sm mb-4" id="contract-preview-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>合約內容</strong>
+        <div class="d-flex gap-2">
+          <% if (contract.status === 'SIGNED') { %>
+            <a class="btn btn-sm btn-outline-primary" href="/contracts/sign/<%= signingToken %>/pdf" target="_blank" rel="noopener">下載 PDF</a>
+          <% } %>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="print-preview">列印</button>
+        </div>
+      </div>
+      <div class="card-body" id="contract-preview-wrapper">
+        <% if (contract.template_logo_url) { %>
+          <div class="text-center mb-3">
+            <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid" style="max-height: 80px;">
+          </div>
+        <% } %>
+        <div class="border rounded p-3 bg-light" style="white-space: pre-wrap; max-height: 520px; overflow: auto;">
           <%- previewContent %>
         </div>
       </div>
@@ -122,5 +135,78 @@ function handleSubmit() {
   hiddenInput.value = signaturePad.toDataURL();
   return true;
 }
+
+const printBtn = document.getElementById('print-contract');
+const printPreviewBtn = document.getElementById('print-preview');
+if (printBtn) {
+  printBtn.addEventListener('click', () => window.print());
+}
+if (printPreviewBtn) {
+  printPreviewBtn.addEventListener('click', () => window.print());
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+function prepareClone(element) {
+  const clone = element.cloneNode(true);
+  clone.style.maxHeight = 'none';
+  clone.style.overflow = 'visible';
+  clone.style.position = 'absolute';
+  clone.style.left = '-9999px';
+  clone.style.top = '0';
+  clone.style.width = `${element.scrollWidth || element.offsetWidth}px`;
+  clone.style.height = `${element.scrollHeight || element.offsetHeight}px`;
+  const scrollable = clone.querySelector('.border');
+  if (scrollable) {
+    scrollable.style.maxHeight = 'none';
+    scrollable.style.overflow = 'visible';
+    scrollable.style.height = 'auto';
+    scrollable.style.width = `${scrollable.scrollWidth || scrollable.offsetWidth}px`;
+  }
+  document.body.appendChild(clone);
+  return clone;
+}
+
+async function downloadPdf(elementId, filename) {
+  const wrapper = document.getElementById(elementId);
+  if (!wrapper) return;
+  const scrollable = wrapper.querySelector('.border') || wrapper;
+  const clone = prepareClone(scrollable);
+  const canvas = await html2canvas(clone, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#ffffff',
+    scrollY: -window.scrollY,
+  });
+  clone.remove();
+  const imgData = canvas.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('p', 'pt', 'a4');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgProps = pdf.getImageProperties(imgData);
+  const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
+  const imgWidth = imgProps.width * ratio;
+  const imgHeight = imgProps.height * ratio;
+
+  let heightLeft = imgHeight;
+  let position = 0;
+
+  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+
+  pdf.save(filename);
+}
+
+const pdfButtons = document.querySelectorAll('#download-pdf, #download-pdf-top');
+pdfButtons.forEach(btn => btn?.addEventListener('click', () => downloadPdf('contract-preview-card', `contract-${'<%= contract.id %>'}.pdf`)));
 </script>
 <%- include('partials/footer') %>

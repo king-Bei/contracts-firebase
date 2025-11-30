@@ -69,6 +69,12 @@
         <div class="border rounded p-3 bg-light" style="white-space: pre-wrap; max-height: 520px; overflow: auto;">
           <%- previewContent %>
         </div>
+        <% if (contract.signature_image) { %>
+          <div class="border rounded p-3 bg-white mt-3">
+            <div class="fw-bold mb-2">簽署圖片</div>
+            <img src="<%= contract.signature_image %>" alt="客戶簽名" class="img-fluid border rounded" style="max-height: 220px;">
+          </div>
+        <% } %>
       </div>
     </div>
 

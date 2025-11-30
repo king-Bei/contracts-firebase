@@ -1,7 +1,13 @@
 <%- include('partials/header') %>
 
 <div class="container mt-4">
-    <h1 class="mb-4">編輯合約範本</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <a href="/admin" class="btn btn-outline-secondary btn-sm">返回管理首頁</a>
+            <h1 class="mb-0">編輯合約範本</h1>
+        </div>
+        <a href="/admin/templates" class="btn btn-outline-secondary">返回範本列表</a>
+    </div>
 
     <div class="card shadow-sm">
         <div class="card-body">
@@ -22,6 +28,42 @@
                     <p class="form-text">
                         使用 <code>{{variable_key}}</code> 格式插入變數（例：<code>{{client_name}}</code>）。可直接編輯或上傳檔案填入內容，亦可插入圖片。
                     </p>
+                    <div class="btn-toolbar mb-2" role="toolbar" aria-label="HTML 編輯工具">
+                        <div class="btn-group me-2" role="group" aria-label="文字樣式">
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="bold">粗體</button>
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="italic">斜體</button>
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="underline">底線</button>
+                        </div>
+                        <div class="btn-group me-2" role="group" aria-label="對齊">
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="justifyLeft">置左</button>
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="justifyCenter">置中</button>
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="justifyRight">置右</button>
+                        </div>
+                        <div class="btn-group me-2" role="group" aria-label="列表">
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="insertUnorderedList">項目清單</button>
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="insertOrderedList">編號清單</button>
+                        </div>
+                        <div class="btn-group me-2" role="group" aria-label="連結">
+                            <button type="button" class="btn btn-light btn-sm" id="insert-link">插入連結</button>
+                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="unlink">移除連結</button>
+                        </div>
+                        <div class="input-group input-group-sm w-auto me-2">
+                            <label class="input-group-text" for="font-size-select">字級</label>
+                            <select class="form-select" id="font-size-select">
+                                <option value="">預設</option>
+                                <option value="14">14px</option>
+                                <option value="16">16px</option>
+                                <option value="18">18px</option>
+                                <option value="20">20px</option>
+                                <option value="24">24px</option>
+                                <option value="28">28px</option>
+                                <option value="32">32px</option>
+                            </select>
+                        </div>
+                        <div class="btn-group" role="group" aria-label="模式">
+                            <button type="button" class="btn btn-outline-dark btn-sm" id="toggle-html-view">切換原始碼</button>
+                        </div>
+                    </div>
                     <div class="d-flex flex-column flex-md-row gap-2 mb-2">
                         <input type="file" accept=".txt,.html,.htm" class="form-control" id="content-upload">
                         <div class="d-flex gap-2 flex-wrap">
@@ -29,7 +71,8 @@
                             <button type="button" class="btn btn-outline-primary" id="insert-image">插入圖片</button>
                         </div>
                     </div>
-                    <div id="content-editor" class="form-control bg-light" style="min-height: 280px;" contenteditable="true"></div>
+                    <textarea class="form-control font-monospace d-none" id="html-source" style="min-height: 260px;"></textarea>
+                    <div id="content-editor" class="form-control bg-light content-editor" style="min-height: 280px;" contenteditable="true"></div>
                     <textarea class="d-none" id="content" name="content" required><%= template.content %></textarea>
                 </div>
 
@@ -124,14 +167,67 @@ document.addEventListener('DOMContentLoaded', () => {
     const detectButton = document.getElementById('detect-variables');
     const insertPlaceholderButton = document.getElementById('insert-placeholder');
     const insertImageButton = document.getElementById('insert-image');
+    const toggleHtmlButton = document.getElementById('toggle-html-view');
+    const htmlSource = document.getElementById('html-source');
+    const insertLinkButton = document.getElementById('insert-link');
+    const editorCommandButtons = document.querySelectorAll('.editor-btn');
+    const fontSizeSelect = document.getElementById('font-size-select');
+    let isHtmlMode = false;
 
     // 初始化編輯器內容
     function setEditorContent(html) {
-        contentEditor.innerHTML = html || '';
+        const value = html || '';
+        contentEditor.innerHTML = value;
+        htmlSource.value = value;
     }
 
     function getEditorContent() {
-        return (contentEditor.innerHTML || '').trim();
+        const raw = isHtmlMode ? htmlSource.value : contentEditor.innerHTML;
+        return (raw || '').trim();
+    }
+
+    function syncContentToInput() {
+        contentInput.value = isHtmlMode ? (htmlSource.value || '') : (contentEditor.innerHTML || '');
+    }
+
+    function insertAtCursor(field, text) {
+        const start = field.selectionStart ?? field.value.length;
+        const end = field.selectionEnd ?? field.value.length;
+        const before = field.value.slice(0, start);
+        const after = field.value.slice(end);
+        field.value = `${before}${text}${after}`;
+        const pos = start + text.length;
+        field.setSelectionRange(pos, pos);
+        field.focus();
+    }
+
+    function toggleHtmlView() {
+        if (isHtmlMode) {
+            contentEditor.innerHTML = htmlSource.value || '';
+            htmlSource.classList.add('d-none');
+            contentEditor.classList.remove('d-none');
+            toggleHtmlButton.textContent = '切換原始碼';
+            isHtmlMode = false;
+            contentEditor.focus();
+            return;
+        }
+        htmlSource.value = contentEditor.innerHTML.trim();
+        htmlSource.classList.remove('d-none');
+        contentEditor.classList.add('d-none');
+        toggleHtmlButton.textContent = '返回設計視圖';
+        isHtmlMode = true;
+        htmlSource.focus();
+    }
+
+    function runCommand(command, value = null) {
+        if (isHtmlMode) {
+            alert('請先切換回設計視圖再使用工具列。');
+            htmlSource.focus();
+            return;
+        }
+        contentEditor.focus();
+        document.execCommand(command, false, value);
+        htmlSource.value = contentEditor.innerHTML;
     }
 
     setEditorContent(contentInput.value || '');
@@ -157,14 +253,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 setEditorContent(result);
             } else {
                 contentEditor.innerText = result;
+                htmlSource.value = contentEditor.innerHTML;
             }
         };
         reader.readAsText(file);
     });
 
-    function syncContentToInput() {
-        contentInput.value = getEditorContent();
-    }
+    contentEditor.addEventListener('input', () => {
+        if (!isHtmlMode) {
+            htmlSource.value = contentEditor.innerHTML;
+        }
+    });
+
+    htmlSource.addEventListener('input', () => {
+        if (isHtmlMode) {
+            contentEditor.innerHTML = htmlSource.value;
+        }
+    });
 
     function extractPlaceholders(text) {
         const matches = [...(text || '').matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)];
@@ -192,6 +297,27 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(created > 0 ? `已加入 ${created} 個新變數。` : '所有偵測到的變數都已存在。');
     });
 
+    editorCommandButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const command = btn.dataset.command;
+            if (!command) return;
+            runCommand(command);
+        });
+    });
+
+    insertLinkButton.addEventListener('click', () => {
+        const url = prompt('請輸入連結網址 (含 http/https)');
+        if (!url) return;
+        if (isHtmlMode) {
+            const label = prompt('連結文字（選填，預設為網址）') || url;
+            insertAtCursor(htmlSource, `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+            return;
+        }
+        runCommand('createLink', url);
+    });
+
+    toggleHtmlButton.addEventListener('click', toggleHtmlView);
+
     insertPlaceholderButton.addEventListener('click', () => {
         const keys = Array.from(variablesContainer.querySelectorAll('input[name^="var_key_"]'))
             .map(input => input.value.trim())
@@ -204,12 +330,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const selected = prompt('要插入的變數名稱（系統會自動加上 {{ }}）', suggestion);
         if (!selected) return;
         const placeholder = `{{${selected}}}`;
-        contentEditor.focus();
-        if (document.execCommand) {
-            document.execCommand('insertText', false, placeholder);
-        } else {
-            contentEditor.innerText += placeholder;
+        if (isHtmlMode) {
+            insertAtCursor(htmlSource, placeholder);
+            return;
         }
+        runCommand('insertText', placeholder);
     });
 
     insertImageButton.addEventListener('click', () => {
@@ -217,12 +342,30 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!url) return;
         const alt = prompt('圖片說明（選填）') || '';
         const imgTag = `<img src="${url}" alt="${alt}" style="max-width: 100%;">`;
-        contentEditor.focus();
-        if (document.execCommand) {
-            document.execCommand('insertHTML', false, imgTag);
-        } else {
-            contentEditor.innerHTML += imgTag;
+        if (isHtmlMode) {
+            insertAtCursor(htmlSource, imgTag);
+            return;
         }
+        runCommand('insertHTML', imgTag);
+    });
+
+    fontSizeSelect.addEventListener('change', () => {
+        const size = fontSizeSelect.value;
+        if (!size) {
+            runCommand('removeFormat');
+            return;
+        }
+        if (isHtmlMode) {
+            alert('請先切換回設計視圖再套用字級。');
+            htmlSource.focus();
+            return;
+        }
+        const selection = window.getSelection();
+        const text = selection?.toString();
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        span.textContent = text || '文字';
+        runCommand('insertHTML', span.outerHTML);
     });
 
     form.addEventListener('submit', (e) => {
@@ -248,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         syncContentToInput();
-        if (!contentInput.value) {
+        if (!contentInput.value.trim()) {
             alert('請填寫合約內容');
             e.preventDefault();
             return;

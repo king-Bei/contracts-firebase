@@ -60,6 +60,10 @@ h1, h2, h3 {
   background-color: #0b5ed7;
 }
 
+.content-editor {
+  white-space: pre-wrap;
+}
+
 .error-message {
   background-color: #f8d7da;
   color: #721c24;

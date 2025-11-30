@@ -59,6 +59,7 @@
         template.variables.forEach(variable => {
           const key = variable.key || variable.name;
           const labelText = variable.label || variable.name || '變數';
+          const type = (variable.type || 'text').toLowerCase();
           const fieldGroup = document.createElement('div');
           fieldGroup.className = 'mb-3';
 
@@ -68,32 +69,42 @@
           label.textContent = labelText;
 
           let input;
-          if (variable.type === 'textarea') {
+          if (type === 'textarea') {
             input = document.createElement('textarea');
             input.rows = 3;
-          } else if (variable.type === 'checkbox') {
-             // Handle checkbox differently
+          } else if (type === 'checkbox') {
             fieldGroup.className = 'mb-3 form-check';
             input = document.createElement('input');
             input.type = 'checkbox';
             input.className = 'form-check-input';
-
-            label.className = 'form-check-label'; // Bootstrap specific class for checkbox
-            
-            // Re-order for bootstrap styling
+            label.className = 'form-check-label';
             fieldGroup.appendChild(input);
             fieldGroup.appendChild(label);
             variableFieldsContainer.appendChild(fieldGroup);
-            return; // continue to next variable
-          }
-          else {
+            return;
+          } else if (type === 'select') {
+            input = document.createElement('select');
+            input.className = 'form-select';
+            const opts = Array.isArray(variable.options) ? variable.options : [];
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '-- 請選擇 --';
+            placeholder.selected = true;
+            placeholder.disabled = true;
+            input.appendChild(placeholder);
+            opts.forEach(opt => {
+              const optionEl = document.createElement('option');
+              optionEl.value = opt;
+              optionEl.textContent = opt;
+              input.appendChild(optionEl);
+            });
+          } else {
             input = document.createElement('input');
-            input.type = variable.type || 'text';
+            input.type = ['number', 'date'].includes(type) ? type : 'text';
           }
 
-          input.className = 'form-control';
+          input.className = input.className || 'form-control';
           input.id = `var-${key}`;
-          // Use bracket notation to group variable values in the form submission
           input.name = `variables[${key}]`;
 
           fieldGroup.appendChild(label);

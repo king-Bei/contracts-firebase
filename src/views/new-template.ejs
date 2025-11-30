@@ -79,7 +79,7 @@
                 <div class="mb-3">
                     <h5 class="mt-4">範本變數</h5>
                     <p class="form-text">
-                        定義在合約內容中使用的變數。請為每個變數提供一個唯一的「變數名稱」(英文，無空格) 和一個「顯示標籤」(給使用者看的中文說明)，並可指定輸入型態（單行、多行或勾選）。
+                        定義在合約內容中使用的變數。請為每個變數提供唯一「變數名稱」(英文，無空格) 和「顯示標籤」，並可指定輸入型態（單行、多行、勾選、數字、日期或下拉選單），可拖曳或按上下鍵調整順序。
                     </p>
                     <div id="variables-container">
                         <!-- Dynamic fields will be inserted here -->
@@ -177,15 +177,15 @@ document.addEventListener('DOMContentLoaded', function () {
         htmlSource.value = contentEditor.innerHTML;
     }
 
-    function addVariableRow(key = '', label = '', type = 'text') {
+    function addVariableRow(key = '', label = '', type = 'text', options = '') {
         variableCount++;
-        const newVariableGroup = document.createElement('div');
-        newVariableGroup.classList.add('row', 'mb-2', 'g-2');
-        newVariableGroup.innerHTML = `
-            <div class="col-md-4">
+        const row = document.createElement('div');
+        row.classList.add('row', 'mb-2', 'g-2', 'align-items-end', 'variable-row');
+        row.innerHTML = `
+            <div class="col-md-3">
                 <input type="text" class="form-control" placeholder="變數名稱 (e.g., client_name)" name="var_key_${variableCount}" value="${key}" required>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <input type="text" class="form-control" placeholder="顯示標籤 (e.g., 客戶姓名)" name="var_label_${variableCount}" value="${label}" required>
             </div>
             <div class="col-md-3">
@@ -193,20 +193,40 @@ document.addEventListener('DOMContentLoaded', function () {
                     <option value="text" ${type === 'text' ? 'selected' : ''}>單行文字</option>
                     <option value="textarea" ${type === 'textarea' ? 'selected' : ''}>多行文字</option>
                     <option value="checkbox" ${type === 'checkbox' ? 'selected' : ''}>勾選</option>
+                    <option value="number" ${type === 'number' ? 'selected' : ''}>數字</option>
+                    <option value="date" ${type === 'date' ? 'selected' : ''}>日期</option>
+                    <option value="select" ${type === 'select' ? 'selected' : ''}>下拉選單</option>
                 </select>
             </div>
-            <div class="col-md-1">
-                <button type="button" class="btn btn-danger w-100 remove-variable">移除</button>
+            <div class="col-md-3">
+                <div class="d-flex gap-2">
+                    <input type="text" class="form-control" placeholder="下拉選項，用逗號分隔" name="var_options_${variableCount}" value="${options}">
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary move-up" title="上移">↑</button>
+                        <button type="button" class="btn btn-outline-secondary move-down" title="下移">↓</button>
+                    </div>
+                    <button type="button" class="btn btn-outline-danger remove-variable" title="刪除">刪除</button>
+                </div>
             </div>
         `;
-        variablesContainer.appendChild(newVariableGroup);
+        variablesContainer.appendChild(row);
     }
 
     addVariableButton.addEventListener('click', () => addVariableRow());
 
     variablesContainer.addEventListener('click', function (e) {
+        const row = e.target.closest('.variable-row');
+        if (!row) return;
         if (e.target.classList.contains('remove-variable')) {
-            e.target.closest('.row').remove();
+            row.remove();
+        }
+        if (e.target.classList.contains('move-up')) {
+            const prev = row.previousElementSibling;
+            if (prev) variablesContainer.insertBefore(row, prev);
+        }
+        if (e.target.classList.contains('move-down')) {
+            const next = row.nextElementSibling;
+            if (next) variablesContainer.insertBefore(next, row);
         }
     });
 
@@ -341,16 +361,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     form.addEventListener('submit', function (e) {
         const variables = [];
-        const variableRows = variablesContainer.querySelectorAll('.row');
+        const variableRows = variablesContainer.querySelectorAll('.variable-row');
         let isValid = true;
         variableRows.forEach(row => {
             const keyInput = row.querySelector('input[name^="var_key_"]');
             const labelInput = row.querySelector('input[name^="var_label_"]');
             const typeInput = row.querySelector('select[name^="var_type_"]');
+            const optionsInput = row.querySelector('input[name^="var_options_"]');
             
             const key = keyInput.value.trim();
             const label = labelInput.value.trim();
             const type = (typeInput?.value || 'text').toLowerCase();
+            const rawOptions = (optionsInput?.value || '').trim();
 
             if (key && label) {
                 // Basic validation for variable name (no spaces, English chars)
@@ -360,8 +382,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     isValid = false;
                     return;
                 }
-                const normalizedType = ['text', 'textarea', 'checkbox'].includes(type) ? type : 'text';
-                variables.push({ key: key, label: label, type: normalizedType });
+                const normalizedType = ['text', 'textarea', 'checkbox', 'number', 'date', 'select'].includes(type) ? type : 'text';
+                const options = normalizedType === 'select'
+                    ? rawOptions.split(',').map(v => v.trim()).filter(Boolean)
+                    : undefined;
+                variables.push({ key: key, label: label, type: normalizedType, options });
             }
         });
 

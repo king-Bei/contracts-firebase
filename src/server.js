@@ -6,11 +6,13 @@ if (process.env.NODE_ENV !== 'production') {
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const { Readable } = require('stream');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const https = require('https');
 const PDFDocument = require('pdfkit');
+const { google } = require('googleapis');
 
 const userModel = require('./models/userModel');
 const contractTemplateModel = require('./models/contractTemplateModel');
@@ -291,6 +293,83 @@ const computeImageOptions = (styles = {}, pageWidth = 400, pageHeight = 400) => 
   return options;
 };
 
+const formatSignedFilename = (contract) => {
+  const signedDate = contract.signed_at ? new Date(contract.signed_at) : new Date();
+  const yyyy = signedDate.getFullYear();
+  const mm = String(signedDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(signedDate.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}-${contract.id}.pdf`;
+};
+
+const normalizePrivateKey = (key) => {
+  if (!key) return key;
+  let normalized = key.trim();
+  // strip surrounding quotes if accidentally included
+  if (normalized.startsWith('"') && normalized.endsWith('"')) {
+    normalized = normalized.slice(1, -1);
+  }
+  if (normalized.startsWith("'") && normalized.endsWith("'")) {
+    normalized = normalized.slice(1, -1);
+  }
+  // handle escaped and Windows line endings
+  normalized = normalized.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+  return normalized;
+};
+
+let driveClient = null;
+const getDriveClient = () => {
+  if (driveClient) return driveClient;
+  if (process.env.ENABLE_DRIVE_BACKUP !== 'true') {
+    return null;
+  }
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = normalizePrivateKey(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
+
+  if (!clientEmail || !privateKey || !process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    console.warn('Google Drive 未設定，跳過自動上傳簽署 PDF。');
+    return null;
+  }
+
+  const auth = new google.auth.JWT(
+    clientEmail,
+    null,
+    privateKey,
+    ['https://www.googleapis.com/auth/drive.file']
+  );
+  driveClient = google.drive({ version: 'v3', auth });
+  return driveClient;
+};
+
+const uploadSignedPdfToDrive = async (contract, pdfBuffer) => {
+  if (process.env.ENABLE_DRIVE_BACKUP !== 'true') return null;
+  const drive = getDriveClient();
+  if (!drive) return null;
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const filename = formatSignedFilename(contract);
+
+  try {
+    const fileMetadata = {
+      name: filename,
+      parents: [folderId],
+    };
+
+    const media = {
+      mimeType: 'application/pdf',
+      body: Readable.from(pdfBuffer),
+    };
+
+    const response = await drive.files.create({
+      requestBody: fileMetadata,
+      media,
+      fields: 'id, webViewLink, webContentLink',
+    });
+    return response.data;
+  } catch (error) {
+    console.error('上傳簽署 PDF 至 Google Drive 失敗:', error.message);
+    return null;
+  }
+};
+
 const NOTO_SANS_TC_URL = 'https://fonts.gstatic.com/ea/notosanstc/v1/NotoSansTC-Regular.otf';
 const LOCAL_TCFONT_PATH = path.join(__dirname, '..', 'fonts', 'NotoSansTC-Regular.otf');
 let cachedTcFont = null;
@@ -330,12 +409,7 @@ const getTraditionalChineseFont = async () => {
 
 const SIGN_PLACEHOLDER = '簽署欄位';
 
-const streamContractPdf = async (res, contract) => {
-  const doc = new PDFDocument({ margin: 50 });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="contract-${contract.id}.pdf"`);
-  doc.pipe(res);
-
+const applyContractPdfContent = async (doc, contract) => {
   const tcFont = await getTraditionalChineseFont();
   if (tcFont) {
     doc.registerFont('NotoTC', tcFont);
@@ -407,8 +481,33 @@ const streamContractPdf = async (res, contract) => {
       doc.moveDown(0.5);
     }
   }
+};
 
+const streamContractPdf = async (res, contract) => {
+  const doc = new PDFDocument({ margin: 50 });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="contract-${contract.id}.pdf"`);
+  doc.pipe(res);
+  await applyContractPdfContent(doc, contract);
   doc.end();
+};
+
+const generateContractPdfBuffer = (contract) => {
+  return new Promise(async (resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
+    const chunks = [];
+
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('error', reject);
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+    try {
+      await applyContractPdfContent(doc, contract);
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
 };
 
 const markContractVerified = (req, token) => {
@@ -1286,6 +1385,17 @@ app.post('/contracts/sign/:token', async (req, res) => {
     }
 
     const updated = await contractModel.markAsSigned(contract.id, signature_data);
+    const signedContract = { ...contract, ...updated };
+
+    if (process.env.ENABLE_DRIVE_BACKUP === 'true') {
+      try {
+        const pdfBuffer = await generateContractPdfBuffer(signedContract);
+        await uploadSignedPdfToDrive(signedContract, pdfBuffer);
+      } catch (err) {
+        console.error('簽署後自動備份 PDF 失敗:', err);
+      }
+    }
+
     if (req.session.verifiedContracts) {
       delete req.session.verifiedContracts[req.params.token];
     }
@@ -1293,7 +1403,7 @@ app.post('/contracts/sign/:token', async (req, res) => {
     res.render('sign-contract', {
       title: '合約已完成',
       signingToken: req.params.token,
-      contract: { ...contract, ...updated },
+      contract: signedContract,
       previewContent,
       isVerified: true,
       canSign: false,

@@ -81,6 +81,7 @@
       const key = variable.key || variable.name;
       const label = variable.label || variable.name || '變數';
       const type = (variable.type || 'text').toLowerCase();
+      const options = Array.isArray(variable.options) ? variable.options : [];
       const safeKey = escapeAttr(key);
       const safeLabel = escapeAttr(label);
       const value = existingValues[key] || '';
@@ -108,10 +109,27 @@
         `;
       }
 
+      if (type === 'select') {
+        const optionsHtml = options.map(opt => {
+          const escapedOpt = escapeAttr(opt);
+          const selected = value === opt ? 'selected' : '';
+          return `<option value="${escapedOpt}" ${selected}>${escapedOpt}</option>`;
+        }).join('');
+        return `
+          <div class="col-md-6">
+            <label class="form-label" for="${inputId}">${safeLabel}</label>
+            <select class="form-select" id="${inputId}" name="entries[${entryId}][variables][${safeKey}]">
+              <option value="" ${value ? '' : 'selected'} disabled>-- 請選擇 --</option>
+              ${optionsHtml}
+            </select>
+          </div>
+        `;
+      }
+
       return `
         <div class="col-md-6">
           <label class="form-label" for="${inputId}">${safeLabel}</label>
-          <input type="text" class="form-control" id="${inputId}" name="entries[${entryId}][variables][${safeKey}]" value="${safeValue}">
+          <input type="${['number','date'].includes(type) ? type : 'text'}" class="form-control" id="${inputId}" name="entries[${entryId}][variables][${safeKey}]" value="${safeValue}">
         </div>
       `;
     }).join('');

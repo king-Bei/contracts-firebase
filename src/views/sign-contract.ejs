@@ -8,7 +8,7 @@
     <div class="alert alert-danger"><%= error %></div>
   <% } %>
 
-  <div class="card shadow-sm mb-4">
+  <div class="card shadow-sm mb-4 anim-fade-up">
     <div class="card-header d-flex justify-content-between align-items-center">
       <strong>驗證碼驗證</strong>
       <% if (isVerified) { %>
@@ -36,7 +36,7 @@
   </div>
 
   <% if (isVerified) { %>
-    <div class="card shadow-sm mb-4">
+    <div class="card shadow-sm mb-4 anim-fade-up">
       <div class="card-header">
         <strong><%= contract.template_name %></strong>
       </div>
@@ -50,7 +50,7 @@
       </div>
     </div>
 
-    <div class="card shadow-sm mb-4" id="contract-preview-card">
+    <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <strong>合約內容</strong>
         <div class="d-flex gap-2">
@@ -79,7 +79,7 @@
     </div>
 
     <% if (canSign) { %>
-      <div class="card shadow-sm">
+      <div class="card shadow-sm anim-fade-up">
         <div class="card-header">簽署確認</div>
         <div class="card-body">
           <form method="POST" action="" onsubmit="return handleSubmit();">

@@ -189,6 +189,108 @@ const htmlToPlain = (html) => {
     .trim();
 };
 
+const parseStyleMap = (styleString = '') => {
+  const styles = {};
+  styleString.split(';').forEach(pair => {
+    const [rawKey, rawVal] = pair.split(':');
+    if (!rawKey || !rawVal) return;
+    styles[rawKey.trim().toLowerCase()] = rawVal.trim();
+  });
+  return styles;
+};
+
+const dataUrlToBuffer = (dataUrl) => {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
+  const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+  if (!match) return null;
+  return Buffer.from(match[2], 'base64');
+};
+
+const extractContentPartsWithImages = (html) => {
+  const parts = [];
+  if (!html) return parts;
+
+  const imgRegex = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = imgRegex.exec(html)) !== null) {
+    const before = html.slice(lastIndex, match.index);
+    const textContent = htmlToPlain(before);
+    if (textContent) {
+      parts.push({ type: 'text', content: textContent });
+    }
+    const src = match[1];
+    const fullTag = match[0] || '';
+    const styleMatch = fullTag.match(/style=["']([^"']*)["']/i);
+    const widthMatch = fullTag.match(/\bwidth=["']([^"']+)["']/i);
+    const heightMatch = fullTag.match(/\bheight=["']([^"']+)["']/i);
+    const styles = parseStyleMap(styleMatch ? styleMatch[1] : '');
+    if (widthMatch && !styles.width) styles.width = widthMatch[1];
+    if (heightMatch && !styles.height) styles.height = heightMatch[1];
+
+    if (src) {
+      parts.push({ type: 'image', src, styles });
+    }
+    lastIndex = imgRegex.lastIndex;
+  }
+
+  const remaining = html.slice(lastIndex);
+  const remainingText = htmlToPlain(remaining);
+  if (remainingText) {
+    parts.push({ type: 'text', content: remainingText });
+  }
+
+  return parts;
+};
+
+const computeImageOptions = (styles = {}, pageWidth = 400, pageHeight = 400) => {
+  const parseLength = (value, base) => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    const percentMatch = trimmed.match(/^([0-9.]+)%$/);
+    if (percentMatch) {
+      return base * (parseFloat(percentMatch[1]) / 100);
+    }
+    const pxMatch = trimmed.match(/^([0-9.]+)px$/);
+    if (pxMatch) {
+      return parseFloat(pxMatch[1]);
+    }
+    const numMatch = trimmed.match(/^([0-9.]+)$/);
+    if (numMatch) {
+      return parseFloat(numMatch[1]);
+    }
+    return null;
+  };
+
+  const widthVal = parseLength(styles.width, pageWidth);
+  const heightVal = parseLength(styles.height, pageHeight);
+  const maxWidthVal = parseLength(styles['max-width'], pageWidth);
+  const maxHeightVal = parseLength(styles['max-height'], pageHeight);
+
+  let targetWidth = widthVal || maxWidthVal || pageWidth;
+  let targetHeight = heightVal || maxHeightVal || null;
+
+  if (maxWidthVal && targetWidth > maxWidthVal) {
+    targetWidth = maxWidthVal;
+  }
+  if (maxHeightVal && targetHeight && targetHeight > maxHeightVal) {
+    targetHeight = maxHeightVal;
+  }
+
+  const options = { align: 'left' };
+  if (targetWidth && targetHeight) {
+    options.fit = [targetWidth, targetHeight];
+  } else if (targetWidth) {
+    options.width = targetWidth;
+  } else if (targetHeight) {
+    options.height = targetHeight;
+  } else {
+    options.fit = [pageWidth, pageHeight / 2];
+  }
+  return options;
+};
+
 const NOTO_SANS_TC_URL = 'https://fonts.gstatic.com/ea/notosanstc/v1/NotoSansTC-Regular.otf';
 const LOCAL_TCFONT_PATH = path.join(__dirname, '..', 'fonts', 'NotoSansTC-Regular.otf');
 let cachedTcFont = null;
@@ -264,9 +366,9 @@ const streamContractPdf = async (res, contract) => {
     signatureImage: null,
     signaturePlaceholder: SIGN_PLACEHOLDER,
   });
-  const plainContent = htmlToPlain(filledContent) || '（無內容）';
-
-  const parts = plainContent.split(SIGN_PLACEHOLDER);
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const pageHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
+  const parts = filledContent.split(SIGN_PLACEHOLDER);
   const hasSignature = Boolean(contract.signature_image);
   let sigBuffer = null;
   if (hasSignature) {
@@ -274,19 +376,37 @@ const streamContractPdf = async (res, contract) => {
   }
 
   doc.fontSize(12);
-  parts.forEach((part, index) => {
-    doc.text(part || '');
-    const needsSignature = hasSignature && index < parts.length - 1;
+  for (let i = 0; i < parts.length; i++) {
+    const contentBlocks = extractContentPartsWithImages(parts[i]);
+    for (const block of contentBlocks) {
+      if (block.type === 'text') {
+        doc.text(block.content);
+        doc.moveDown(0.5);
+      } else if (block.type === 'image') {
+        const imgBuffer = block.src.startsWith('data:')
+          ? dataUrlToBuffer(block.src)
+          : await fetchImageBuffer(block.src);
+        if (imgBuffer) {
+          const imgOptions = computeImageOptions(block.styles, pageWidth, pageHeight);
+          doc.image(imgBuffer, imgOptions);
+        } else {
+          doc.text('[圖片無法取得]');
+        }
+        doc.moveDown(0.5);
+      }
+    }
+
+    const needsSignature = hasSignature && i < parts.length - 1;
     if (needsSignature) {
       doc.moveDown(0.5);
       if (sigBuffer) {
-        doc.image(sigBuffer, { fit: [240, 160] });
+        doc.image(sigBuffer, { fit: [pageWidth * 0.6, 200], align: 'left' });
       } else {
         doc.text('[簽名圖片無法取得]');
       }
       doc.moveDown(0.5);
     }
-  });
+  }
 
   doc.end();
 };

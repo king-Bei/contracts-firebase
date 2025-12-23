@@ -1202,6 +1202,41 @@ app.post('/sales/contracts/:id/edit', checkAuth, async (req, res) => {
   }
 });
 
+// 作廢合約
+app.post('/sales/contracts/:id/cancel', checkAuth, async (req, res) => {
+  if (req.session.user.role !== 'salesperson') {
+    return res.status(403).send('權限不足');
+  }
+
+  try {
+    const contract = await contractModel.findById(req.params.id);
+    if (!contract) {
+      return res.status(404).send('找不到合約');
+    }
+
+    if (contract.salesperson_id !== req.session.user.id) {
+      return res.status(403).send('您無權作廢此合約');
+    }
+
+    if (contract.status === 'SIGNED') {
+      req.session.flashMessage = '已簽署的合約無法作廢。';
+      return res.redirect(`/sales/contracts/${contract.id}`);
+    }
+
+    if (contract.status === 'CANCELLED') {
+      req.session.flashMessage = '此合約已作廢。';
+      return res.redirect(`/sales/contracts/${contract.id}`);
+    }
+
+    const cancelled = await contractModel.cancel(contract.id, req.session.user.id);
+    req.session.flashMessage = cancelled ? '合約已成功作廢。' : '作廢失敗，請稍後再試。';
+    res.redirect('/sales');
+  } catch (error) {
+    console.error('Failed to cancel contract:', error);
+    res.status(500).send('無法作廢合約');
+  }
+});
+
 // 公開簽署頁面
 app.get('/contracts/sign/:token', async (req, res) => {
   try {

@@ -313,6 +313,20 @@ async function markAsSigned(id, signatureImage) {
   return rows[0] || null;
 }
 
+async function cancel(id, salespersonId) {
+  const queryText = `
+    UPDATE contracts
+    SET status = 'CANCELLED',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1
+      AND salesperson_id = $2
+      AND status IN ('PENDING_SIGNATURE', 'DRAFT')
+    RETURNING *;
+  `;
+  const { rows } = await db.query(queryText, [id, salespersonId]);
+  return rows[0] || null;
+}
+
 module.exports = {
   createContractsTable,
   findAll,
@@ -325,4 +339,5 @@ module.exports = {
   markAsSigned,
   update,
   ensureShortLinkCode,
+  cancel,
 };

@@ -55,8 +55,23 @@
       
       variableFieldsContainer.innerHTML = ''; // Clear loading message
 
-      if (template && template.variables) {
-        template.variables.forEach(variable => {
+      let variables = [];
+      if (Array.isArray(template.variables)) {
+        variables = template.variables;
+      } else if (typeof template.variables === 'string') {
+        try {
+          variables = JSON.parse(template.variables);
+        } catch (err) {
+          variables = [];
+        }
+      }
+
+      if (!variables.length) {
+        variableFieldsContainer.innerHTML = '<p class="text-muted">此範本沒有可填寫的變數欄位。</p>';
+        return;
+      }
+
+      variables.forEach(variable => {
           const key = variable.key || variable.name;
           const labelText = variable.label || variable.name || '變數';
           const type = (variable.type || 'text').toLowerCase();
@@ -73,15 +88,11 @@
             input = document.createElement('textarea');
             input.rows = 3;
           } else if (type === 'checkbox') {
-            fieldGroup.className = 'mb-3 form-check';
             input = document.createElement('input');
             input.type = 'checkbox';
             input.className = 'form-check-input';
             label.className = 'form-check-label';
-            fieldGroup.appendChild(input);
-            fieldGroup.appendChild(label);
-            variableFieldsContainer.appendChild(fieldGroup);
-            return;
+            fieldGroup.className = 'mb-3 form-check';
           } else if (type === 'select') {
             input = document.createElement('select');
             input.className = 'form-select';
@@ -106,12 +117,17 @@
           input.className = input.className || 'form-control';
           input.id = `var-${key}`;
           input.name = `variables[${key}]`;
+          label.setAttribute('for', `var-${key}`);
 
-          fieldGroup.appendChild(label);
-          fieldGroup.appendChild(input);
+          if (type === 'checkbox') {
+            fieldGroup.appendChild(input);
+            fieldGroup.appendChild(label);
+          } else {
+            fieldGroup.appendChild(label);
+            fieldGroup.appendChild(input);
+          }
           variableFieldsContainer.appendChild(fieldGroup);
         });
-      }
     } catch (error) {
       variableFieldsContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
     }

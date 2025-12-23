@@ -40,7 +40,19 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: '找不到指定的合約範本。' });
     }
 
-    res.json(template);
+    let parsedVariables = template.variables;
+    if (typeof parsedVariables === 'string') {
+      try {
+        parsedVariables = JSON.parse(parsedVariables);
+      } catch (err) {
+        parsedVariables = [];
+      }
+    }
+    if (!Array.isArray(parsedVariables)) {
+      parsedVariables = [];
+    }
+
+    res.json({ ...template, variables: parsedVariables });
   } catch (error) {
     console.error(`Error fetching template ${req.params.id}:`, error.message);
     res.status(500).send('伺服器錯誤');

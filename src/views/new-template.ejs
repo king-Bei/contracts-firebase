@@ -177,18 +177,21 @@ document.addEventListener('DOMContentLoaded', function () {
         htmlSource.value = contentEditor.innerHTML;
     }
 
-    function addVariableRow(key = '', label = '', type = 'text', options = '') {
+    function addVariableRow(key = '', label = '', type = 'text', options = '', isCustomerFillable = false, isRequired = false) {
         variableCount++;
         const row = document.createElement('div');
-        row.classList.add('row', 'mb-2', 'g-2', 'align-items-end', 'variable-row');
+        row.classList.add('row', 'mb-3', 'g-2', 'align-items-center', 'variable-row', 'p-2', 'border', 'rounded');
         row.innerHTML = `
-            <div class="col-md-3">
-                <input type="text" class="form-control" placeholder="變數名稱 (e.g., client_name)" name="var_key_${variableCount}" value="${key}" required>
+            <div class="col-md-2">
+                <label class="form-label small">變數名稱</label>
+                <input type="text" class="form-control" placeholder="client_name" name="var_key_${variableCount}" value="${key}" required>
             </div>
-            <div class="col-md-3">
-                <input type="text" class="form-control" placeholder="顯示標籤 (e.g., 客戶姓名)" name="var_label_${variableCount}" value="${label}" required>
+            <div class="col-md-2">
+                <label class="form-label small">顯示標籤</label>
+                <input type="text" class="form-control" placeholder="客戶姓名" name="var_label_${variableCount}" value="${label}" required>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label small">輸入型態</label>
                 <select class="form-select" name="var_type_${variableCount}">
                     <option value="text" ${type === 'text' ? 'selected' : ''}>單行文字</option>
                     <option value="textarea" ${type === 'textarea' ? 'selected' : ''}>多行文字</option>
@@ -199,17 +202,46 @@ document.addEventListener('DOMContentLoaded', function () {
                 </select>
             </div>
             <div class="col-md-3">
-                <div class="d-flex gap-2">
-                    <input type="text" class="form-control" placeholder="下拉選項，用逗號分隔" name="var_options_${variableCount}" value="${options}">
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-outline-secondary move-up" title="上移">↑</button>
-                        <button type="button" class="btn btn-outline-secondary move-down" title="下移">↓</button>
+                <label class="form-label small">下拉選項 <span class="text-muted">(用逗號分)</span></label>
+                <input type="text" class="form-control" placeholder="選項A,選項B" name="var_options_${variableCount}" value="${options || ''}" ${type !== 'select' ? 'disabled' : ''}>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="d-flex gap-3 w-100 justify-content-end align-items-center">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="var_customer_fill_${variableCount}" ${isCustomerFillable ? 'checked' : ''}>
+                        <label class="form-check-label small">客戶填寫</label>
                     </div>
-                    <button type="button" class="btn btn-outline-danger remove-variable" title="刪除">刪除</button>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="var_is_required_${variableCount}" ${isRequired ? 'checked' : ''} ${!isCustomerFillable ? 'disabled' : ''}>
+                        <label class="form-check-label small">客戶必填</label>
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm move-up" title="上移">↑</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm move-down" title="下移">↓</button>
+                    </div>
+                    <button type="button" class="btn btn-outline-danger btn-sm remove-variable" title="刪除">✖</button>
                 </div>
             </div>
         `;
         variablesContainer.appendChild(row);
+
+        const typeSelect = row.querySelector(`select[name="var_type_${variableCount}"]`);
+        const optionsInput = row.querySelector(`input[name="var_options_${variableCount}"]`);
+        typeSelect.addEventListener('change', (e) => {
+            optionsInput.disabled = e.target.value !== 'select';
+            if (e.target.value !== 'select') {
+                optionsInput.value = '';
+            }
+        });
+
+        const customerFillCheck = row.querySelector(`input[name="var_customer_fill_${variableCount}"]`);
+        const isRequiredCheck = row.querySelector(`input[name="var_is_required_${variableCount}"]`);
+        customerFillCheck.addEventListener('change', (e) => {
+            isRequiredCheck.disabled = !e.target.checked;
+            if (!e.target.checked) {
+                isRequiredCheck.checked = false;
+            }
+        });
     }
 
     addVariableButton.addEventListener('click', () => addVariableRow());
@@ -278,7 +310,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let created = 0;
         placeholders.forEach(key => {
             if (!existingKeys.has(key)) {
-                addVariableRow(key, key);
+                addVariableRow(key, key, 'text', '', false, false);
                 created++;
             }
         });
@@ -363,35 +395,57 @@ document.addEventListener('DOMContentLoaded', function () {
         const variables = [];
         const variableRows = variablesContainer.querySelectorAll('.variable-row');
         let isValid = true;
-        variableRows.forEach(row => {
+        const variableKeys = new Set();
+
+        for (const row of variableRows) {
             const keyInput = row.querySelector('input[name^="var_key_"]');
             const labelInput = row.querySelector('input[name^="var_label_"]');
             const typeInput = row.querySelector('select[name^="var_type_"]');
             const optionsInput = row.querySelector('input[name^="var_options_"]');
+            const customerFillInput = row.querySelector('input[name^="var_customer_fill_"]');
+            const isRequiredInput = row.querySelector('input[name^="var_is_required_"]');
             
             const key = keyInput.value.trim();
             const label = labelInput.value.trim();
             const type = (typeInput?.value || 'text').toLowerCase();
             const rawOptions = (optionsInput?.value || '').trim();
+            const isCustomerFillable = customerFillInput.checked;
+            const isRequired = isRequiredInput.checked;
 
-            if (key && label) {
-                // Basic validation for variable name (no spaces, English chars)
-                if (!/^[a-zA-Z0-9_]+$/.test(key)) {
-                    alert('變數名稱只能包含英文字母、數字和底線，且不能有空格。');
-                    keyInput.focus();
-                    isValid = false;
-                    return;
-                }
-                const normalizedType = ['text', 'textarea', 'checkbox', 'number', 'date', 'select'].includes(type) ? type : 'text';
-                const options = normalizedType === 'select'
-                    ? rawOptions.split(',').map(v => v.trim()).filter(Boolean)
-                    : undefined;
-                variables.push({ key: key, label: label, type: normalizedType, options });
+            if (!key || !label) continue;
+
+            if (!/^[a-zA-Z0-9_]+$/.test(key)) {
+                alert(`變數名稱 "${key}" 格式錯誤，只能包含英文字母、數字和底線，且不能有空格。`);
+                keyInput.focus();
+                isValid = false;
+                break;
             }
-        });
+
+            if (variableKeys.has(key)) {
+                alert(`偵測到重複的變數名稱 "${key}"，請確保每個變數名稱都是唯一的。`);
+                keyInput.focus();
+                isValid = false;
+                break;
+            }
+            variableKeys.add(key);
+
+            const normalizedType = ['text', 'textarea', 'checkbox', 'number', 'date', 'select'].includes(type) ? type : 'text';
+            const options = normalizedType === 'select'
+                ? rawOptions.split(',').map(v => v.trim()).filter(Boolean)
+                : undefined;
+
+            if (normalizedType === 'select' && (!options || options.length === 0)) {
+                alert(`變數 "${key}" 的型態為下拉選單，但未提供任何選項。`);
+                optionsInput.focus();
+                isValid = false;
+                break;
+            }
+
+            variables.push({ key, label, type: normalizedType, options, isCustomerFillable, isRequired });
+        }
 
         if (!isValid) {
-            e.preventDefault(); // Stop form submission if validation fails
+            e.preventDefault();
             return;
         }
 

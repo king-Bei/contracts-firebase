@@ -207,7 +207,8 @@ async function findByToken(token) {
       c.signed_at,
       ct.name as template_name,
       ct.content as template_content,
-      ct.logo_url as template_logo_url
+      ct.logo_url as template_logo_url,
+      ct.variables as template_variables
     FROM contracts c
     JOIN contract_templates ct ON c.template_id = ct.id
     WHERE c.signing_link_token = $1;
@@ -299,17 +300,18 @@ async function ensureShortLinkCode(contractId) {
   return rows[0]?.short_link_code || shortCode;
 }
 
-async function markAsSigned(id, signatureImage) {
+async function markAsSigned(id, signatureImage, variableValues) {
   const queryText = `
     UPDATE contracts
     SET status = 'SIGNED',
         signature_image = $1,
+        variable_values = $2,
         signed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
-    WHERE id = $2
+    WHERE id = $3
     RETURNING *;
   `;
-  const { rows } = await db.query(queryText, [signatureImage, id]);
+  const { rows } = await db.query(queryText, [signatureImage, variableValues, id]);
   return rows[0] || null;
 }
 

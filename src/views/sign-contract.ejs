@@ -1,4 +1,35 @@
 <%- include('partials/header') %>
+<%
+function renderContractForSigning(templateContent, templateVariables, variableValues) {
+    let content = templateContent || '';
+    const valueMap = new Map(Object.entries(variableValues || {}));
+    
+    (templateVariables || []).forEach(variable => {
+        const key = variable.key;
+        if (!key) return;
+
+        const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+        if (!content.match(regex)) return;
+
+        let replacement = '';
+        const currentValue = valueMap.get(key) || '';
+
+        if (variable.isCustomerFillable) {
+            replacement = `<strong class="text-decoration-underline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</strong>`;
+        } else {
+            let displayValue = currentValue;
+            if (typeof currentValue === 'boolean') {
+                displayValue = currentValue ? '已勾選' : '未勾選';
+            } else if (Array.isArray(currentValue)) {
+                displayValue = currentValue.join(', ');
+            }
+            replacement = `<strong class="text-decoration-underline">${displayValue || '&nbsp;'}</strong>`;
+        }
+        content = content.replace(regex, replacement);
+    });
+    return content;
+}
+%>
 <div class="py-4">
   <h1 class="h3 mb-3">合約簽署</h1>
   <% if (statusMessage) { %>
@@ -50,6 +81,95 @@
       </div>
     </div>
 
+    <% if (canSign) { %>
+    <form method="POST" action="" onsubmit="return handleSubmit();" id="signing-form">
+        <% 
+        const customerFields = (contract.template_variables || []).filter(v => v.isCustomerFillable);
+        if (customerFields.length > 0) {
+        %>
+        <div class="card shadow-sm mb-4 anim-fade-up">
+            <div class="card-header">
+                <strong>請填寫您的資訊</strong>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <% customerFields.forEach(variable => { %>
+                        <div class="col-md-6">
+                            <label class="form-label" for="customer_var_<%= variable.key %>">
+                                <%= variable.label %>
+                                <% if (variable.isRequired) { %><span class="text-danger">*</span><% } %>
+                            </label>
+                            <%
+                            const nameAttr = `name="customer_variables[${variable.key}]"`;
+                            const idAttr = `id="customer_var_${variable.key}"`;
+                            const requiredAttr = variable.isRequired ? 'required' : '';
+                            const currentValue = (contract.variable_values || {})[variable.key] || '';
+                            %>
+                            <% if (variable.type === 'textarea') { %>
+                                <textarea <%= nameAttr %> <%= idAttr %> class="form-control" rows="3" <%= requiredAttr %>><%= currentValue %></textarea>
+                            <% } else if (variable.type === 'checkbox') { %>
+                                <div class="form-check">
+                                    <input type="checkbox" <%= nameAttr %> <%= idAttr %> class="form-check-input" <%= currentValue ? 'checked' : '' %> <%= requiredAttr %>>
+                                </div>
+                            <% } else if (variable.type === 'select') { %>
+                                <select <%= nameAttr %> <%= idAttr %> class="form-select" <%= requiredAttr %>>
+                                    <option value="">請選擇</option>
+                                    <% (variable.options || []).forEach(opt => { %>
+                                        <option value="<%= opt %>" <%= opt === currentValue ? 'selected' : '' %>><%= opt %></option>
+                                    <% }); %>
+                                </select>
+                            <% } else { %>
+                                <input type="<%= variable.type || 'text' %>" <%= nameAttr %> <%= idAttr %> class="form-control" value="<%= currentValue %>" <%= requiredAttr %>>
+                            <% } %>
+                        </div>
+                    <% }); %>
+                </div>
+            </div>
+        </div>
+        <% } %>
+
+        <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>合約內容</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="print-preview">列印</button>
+            </div>
+            <div class="card-body" id="contract-preview-wrapper">
+                <% if (contract.template_logo_url) { %>
+                  <div class="text-center mb-4">
+                    <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid" style="max-height: 80px;">
+                  </div>
+                <% } %>
+                
+                <div class="border rounded p-3 bg-light contract-content-render" style="max-height: 520px; overflow: auto;">
+                  <%- renderContractForSigning(contract.template_content, contract.template_variables, contract.variable_values) %>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm anim-fade-up">
+            <div class="card-header">簽署確認</div>
+            <div class="card-body">
+                <div class="form-check mb-3">
+                  <input class="form-check-input" type="checkbox" value="on" id="agree_terms" name="agree_terms" required>
+                  <label class="form-check-label" for="agree_terms">我已閱讀並同意<a href="/privacy" target="_blank" rel="noopener" class="ms-1">個資保護條款</a></label>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label">簽名</label>
+                  <div class="border rounded" style="height: 220px;">
+                    <canvas id="signature-pad" class="w-100 h-100"></canvas>
+                  </div>
+                  <div class="mt-2 d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" id="clear-signature">清除簽名</button>
+                  </div>
+                  <input type="hidden" name="signature_data" id="signature_data">
+                </div>
+
+                <button type="submit" class="btn btn-primary">送出簽署</button>
+            </div>
+        </div>
+    </form>
+<% } else { %>
     <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <strong>合約內容</strong>
@@ -61,14 +181,16 @@
         </div>
       </div>
       <div class="card-body" id="contract-preview-wrapper">
-        <% if (contract.template_logo_url) { %>
-          <div class="text-center mb-3">
+         <% if (contract.template_logo_url) { %>
+          <div class="text-center mb-4">
             <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid" style="max-height: 80px;">
           </div>
         <% } %>
-        <div class="border rounded p-3 bg-light" style="white-space: pre-wrap; max-height: 520px; overflow: auto;">
-          <%- previewContent %>
+
+        <div class="border rounded p-3 bg-light" style="max-height: 520px; overflow: auto;">
+            <%- previewContent %>
         </div>
+
         <% if (contract.signature_image) { %>
           <div class="border rounded p-3 bg-white mt-3">
             <div class="fw-bold mb-2">簽署圖片</div>
@@ -77,33 +199,7 @@
         <% } %>
       </div>
     </div>
-
-    <% if (canSign) { %>
-      <div class="card shadow-sm anim-fade-up">
-        <div class="card-header">簽署確認</div>
-        <div class="card-body">
-          <form method="POST" action="" onsubmit="return handleSubmit();">
-            <div class="form-check mb-3">
-              <input class="form-check-input" type="checkbox" value="on" id="agree_terms" name="agree_terms" required>
-              <label class="form-check-label" for="agree_terms">我已閱讀並同意<a href="/privacy" target="_blank" rel="noopener" class="ms-1">個資保護條款</a></label>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">簽名</label>
-              <div class="border rounded" style="height: 220px;">
-                <canvas id="signature-pad" class="w-100 h-100"></canvas>
-              </div>
-              <div class="mt-2 d-flex gap-2">
-                <button class="btn btn-sm btn-outline-secondary" type="button" id="clear-signature">清除簽名</button>
-              </div>
-              <input type="hidden" name="signature_data" id="signature_data">
-            </div>
-
-            <button type="submit" class="btn btn-primary">送出簽署</button>
-          </form>
-        </div>
-      </div>
-    <% } %>
+<% } %>
   <% } else { %>
     <div class="alert alert-light border">驗證成功後會立即顯示合約內容與簽署區域。</div>
   <% } %>

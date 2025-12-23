@@ -16,6 +16,7 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false, // 在本地開發時可以接受，生產環境建議使用更嚴格的設定
   },
+  client_encoding: 'UTF8',
 });
 
 // 監聽連線池的錯誤

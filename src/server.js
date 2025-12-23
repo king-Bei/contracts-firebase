@@ -68,53 +68,57 @@ const checkAdmin = (req, res, next) => {
   }
 };
 
-const renderTemplateWithVariables = (content, variables = {}, options = {}) => {
+const renderTemplateWithVariables = (content, variableValues, templateVariables, options = {}) => {
   const { wrapBold = false, signatureImage = null, signaturePlaceholder = '簽署欄位' } = options;
   let filled = content || '';
-  let parsedVariables = variables;
 
-  if (typeof variables === 'string') {
-    try {
-      parsedVariables = JSON.parse(variables || '{}');
-    } catch (e) {
-      parsedVariables = {};
-    }
-  }
+  const values = (typeof variableValues === 'string')
+    ? JSON.parse(variableValues || '{}')
+    : (variableValues || {});
+  
+  const definitions = Array.isArray(templateVariables) ? templateVariables : [];
+  const valueMap = new Map(Object.entries(values));
 
-  const mergedVariables = { ...(parsedVariables || {}) };
-  const signatureTag = signatureImage
-    ? `<div class="mt-2"><img src="${signatureImage}" alt="簽名圖片" style="max-height: 220px;"></div>`
-    : '';
-  if (signatureImage) {
-    mergedVariables[signaturePlaceholder] = signatureTag;
-  }
+  // If we have definitions, iterate in that order. Otherwise, iterate over the given values.
+  const iterable = definitions.length > 0 ? definitions : Array.from(valueMap.keys()).map(key => ({ key }));
 
-  const hasSignaturePlaceholder = new RegExp(`{{\\s*${signaturePlaceholder}\\s*}}`).test(content || '');
+  iterable.forEach(item => {
+    const key = item.key;
+    if (!key) return;
 
-  Object.entries(mergedVariables || {}).forEach(([key, value]) => {
     const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-    let displayValue = value;
-    if (typeof value === 'boolean') {
-      displayValue = value ? '已勾選' : '未勾選';
-    } else if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (['true', 'yes', '1', 'on', '已勾選'].includes(normalized)) {
-        displayValue = '已勾選';
-      } else if (['false', '0', 'no', 'off', '未勾選'].includes(normalized)) {
-        displayValue = '未勾選';
-      }
-    } else if (Array.isArray(value)) {
-      displayValue = value.join(', ');
-    }
+    if (!filled.match(regex)) return;
 
-    if (wrapBold && typeof displayValue === 'string' && !displayValue.trim().startsWith('<')) {
+    const value = valueMap.get(key);
+    let displayValue;
+
+    if (item.type === 'checkbox') {
+        const checked = [true, 'true', 'on', 1, '1', 'yes', '已勾選'].includes(value);
+        displayValue = checked ? '已勾選' : '未勾選';
+    } else if (value === undefined || value === null) {
+        displayValue = '';
+    } else if (Array.isArray(value)) {
+        displayValue = value.join(', ');
+    } else {
+        displayValue = String(value);
+    }
+    
+    if (wrapBold && displayValue && typeof displayValue === 'string' && !displayValue.trim().startsWith('<')) {
       displayValue = `<strong>${displayValue}</strong>`;
     }
-    filled = filled.replace(regex, displayValue ?? '');
+
+    filled = filled.replace(regex, displayValue);
   });
 
-  if (signatureImage && !hasSignaturePlaceholder) {
-    filled += `\n\n<div>簽署欄位：${signatureTag}</div>`;
+  // Handle signature
+  if (signatureImage) {
+    const signatureTag = `<div class="mt-2"><img src="${signatureImage}" alt="簽名圖片" style="max-height: 220px;"></div>`;
+    const sigRegex = new RegExp(`{{\\s*${signaturePlaceholder}\\s*}}`, 'g');
+    if (sigRegex.test(filled)) {
+      filled = filled.replace(sigRegex, signatureTag);
+    } else {
+      filled += `\n\n<div>${signaturePlaceholder}：${signatureTag}</div>`;
+    }
   }
 
   return filled;
@@ -435,7 +439,7 @@ const applyContractPdfContent = async (doc, contract) => {
   doc.moveDown();
 
   // 內容
-  const filledContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+  const filledContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
     wrapBold: false,
     signatureImage: null,
     signaturePlaceholder: SIGN_PLACEHOLDER,
@@ -745,7 +749,7 @@ app.get('/admin/contracts/:id', checkAuth, checkAdmin, async (req, res) => {
       contract = { ...contract, short_link_code: shortCode };
     }
 
-    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
       wrapBold: true,
       signatureImage: contract.signature_image,
     });
@@ -1246,20 +1250,19 @@ app.get('/contracts/sign/:token', async (req, res) => {
     }
 
     const isVerified = isContractVerified(req, req.params.token);
-    const previewContent = isVerified
-      ? renderTemplateWithVariables(contract.template_content, contract.variable_values, {
-          wrapBold: true,
-          signatureImage: contract.signature_image,
-        })
-      : null;
     const canSign = contract.status === 'PENDING_SIGNATURE';
 
+    // For non-signable contracts, render the final content on the server.
     if (!canSign) {
+      const finalContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
+        wrapBold: true,
+        signatureImage: contract.signature_image,
+      });
       return res.render('sign-contract', {
-        title: '合約簽署',
+        title: '合約檢視',
         signingToken: req.params.token,
         contract,
-        previewContent,
+        previewContent: finalContent,
         isVerified,
         canSign,
         error: null,
@@ -1267,11 +1270,12 @@ app.get('/contracts/sign/:token', async (req, res) => {
       });
     }
 
+    // For signable contracts, pass data to the view for rendering, including inputs.
     res.render('sign-contract', {
       title: '合約簽署',
       signingToken: req.params.token,
       contract,
-      previewContent,
+      previewContent: null, // The view will now handle rendering
       isVerified,
       canSign,
       error: null,
@@ -1310,7 +1314,7 @@ app.post('/contracts/sign/:token/verify', async (req, res) => {
 
     const canSign = contract.status === 'PENDING_SIGNATURE';
     const previewContent = isContractVerified(req, req.params.token)
-      ? renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+      ? renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
           wrapBold: true,
           signatureImage: contract.signature_image,
         })
@@ -1360,14 +1364,8 @@ app.post('/contracts/sign/:token', async (req, res) => {
       return res.status(404).send('簽署連結無效');
     }
 
-    const { agree_terms, signature_data } = req.body;
+    const { agree_terms, signature_data, customer_variables } = req.body;
     const isVerified = isContractVerified(req, req.params.token);
-    const previewContent = isVerified
-      ? renderTemplateWithVariables(contract.template_content, contract.variable_values, {
-          wrapBold: true,
-          signatureImage: contract.signature_image,
-        })
-      : null;
 
     if (!isVerified) {
       return res.render('sign-contract', {
@@ -1382,12 +1380,17 @@ app.post('/contracts/sign/:token', async (req, res) => {
       });
     }
 
+    const reRenderablePreview = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
+        wrapBold: true,
+        signatureImage: contract.signature_image,
+      });
+
     if (contract.status !== 'PENDING_SIGNATURE') {
       return res.render('sign-contract', {
         title: '合約簽署',
         signingToken: req.params.token,
         contract,
-        previewContent,
+        previewContent: reRenderablePreview,
         isVerified,
         canSign: false,
         error: null,
@@ -1400,7 +1403,9 @@ app.post('/contracts/sign/:token', async (req, res) => {
         title: '合約簽署',
         signingToken: req.params.token,
         contract,
-        previewContent,
+        previewContent: reRenderablePreview,
+        isVerified,
+        canSign: true,
         error: '請先同意個資保護條款。',
         statusMessage: null,
       });
@@ -1411,15 +1416,20 @@ app.post('/contracts/sign/:token', async (req, res) => {
         title: '合約簽署',
         signingToken: req.params.token,
         contract,
-        previewContent,
+        previewContent: reRenderablePreview,
         isVerified,
         canSign: true,
         error: '請提供簽名。',
         statusMessage: null,
       });
     }
+    
+    const existingVariables = contract.variable_values || {};
+    const customerVariables = customer_variables || {};
+    const finalVariables = { ...existingVariables, ...customerVariables };
+    const normalizedFinalVariables = normalizeVariableValues(finalVariables, contract.template_variables);
 
-    const updated = await contractModel.markAsSigned(contract.id, signature_data);
+    const updated = await contractModel.markAsSigned(contract.id, signature_data, normalizedFinalVariables);
     const signedContract = { ...contract, ...updated };
 
     if (process.env.ENABLE_DRIVE_BACKUP === 'true') {
@@ -1434,12 +1444,17 @@ app.post('/contracts/sign/:token', async (req, res) => {
     if (req.session.verifiedContracts) {
       delete req.session.verifiedContracts[req.params.token];
     }
+    
+    const finalPreviewContent = renderTemplateWithVariables(signedContract.template_content, signedContract.variable_values, signedContract.template_variables, {
+      wrapBold: true,
+      signatureImage: signedContract.signature_image,
+    });
 
     res.render('sign-contract', {
       title: '合約已完成',
       signingToken: req.params.token,
       contract: signedContract,
-      previewContent,
+      previewContent: finalPreviewContent,
       isVerified: true,
       canSign: false,
       error: null,
@@ -1472,7 +1487,7 @@ app.get('/sales/contracts/:id', checkAuth, async (req, res) => {
       contract = { ...contract, short_link_code: shortCode };
     }
 
-    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, {
+    const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
       wrapBold: true,
       signatureImage: contract.signature_image,
     });

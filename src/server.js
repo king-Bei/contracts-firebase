@@ -19,7 +19,18 @@ const contractTemplateModel = require('./models/contractTemplateModel');
 const contractModel = require('./models/contractModel');
 
 const app = express();
+// 在 Cloud Run 或其他代理後端運行時，必須信任 proxy 才能正確設定 secure cookie
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 8080;
+
+// --- 檢查必要環境變數 ---
+if (!process.env.SESSION_SECRET) {
+  console.warn('⚠️  警告：未設定 SESSION_SECRET 環境變數！');
+  console.warn('⚠️  系統將自動產生一組臨時密鑰，這會導致每次重啟伺服器時所有使用者需重新登入。');
+  console.warn('⚠️  請在生產環境 (Cloud Run 等) 的環境變數設定中加入 SESSION_SECRET。');
+  process.env.SESSION_SECRET = require('crypto').randomBytes(32).toString('hex');
+}
 
 // --- 設定 View Engine ---
 app.set('view engine', 'ejs');

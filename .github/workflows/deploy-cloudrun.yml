@@ -50,6 +50,7 @@ jobs:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: ${{ steps.build.outputs.image }}
+          secrets: ["SESSION_SECRET=SESSION_SECRET:latest"] # 將 Secret Manager 中的密鑰掛載為環境變數
           allow-unauthenticated: true
 
       - name: Output service URL

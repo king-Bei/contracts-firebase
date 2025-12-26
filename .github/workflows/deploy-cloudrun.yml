@@ -38,7 +38,8 @@ jobs:
       - name: Build and push image
         run: |
           IMAGE="gcr.io/${PROJECT_ID}/${SERVICE}:$GITHUB_SHA"
-          gcloud builds submit --tag "$IMAGE" .
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
         id: build
 

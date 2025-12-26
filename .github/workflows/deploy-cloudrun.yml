@@ -8,7 +8,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
-  REPOSITORY: ${{ secrets.CLOUD_RUN_SERVICE }} # Use service name as Artifact Registry repo name
+  REPOSITORY: cloud-run-source-deploy # Use a consistent repository for source deployments
   REGION: ${{ secrets.GCP_REGION }}
 
 jobs:

@@ -1561,11 +1561,10 @@ app.use('/api/templates', templateRoutes);
 // 啟動伺服器函數
 async function startServer() {
   try {
-    await userModel.createUsersTable();
-    await contractTemplateModel.createContractTemplatesTable();
-    await contractModel.createContractsTable();
+    // 在生產環境中，資料庫遷移 (migration) 應該是部署流程中的一個獨立步驟，
+    // 而不是在應用程式啟動時執行。應用程式應該假設資料庫結構已經準備就緒。
     app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
+      console.log(`Server listening on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode.`);
     });
   } catch (error) {
     console.error('Failed to initialize application:', error);

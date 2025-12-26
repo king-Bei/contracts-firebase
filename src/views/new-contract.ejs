@@ -35,6 +35,24 @@
 <script>
   const templateSelect = document.getElementById('template_id');
   const variableFieldsContainer = document.getElementById('variable-fields');
+  const user = <%- JSON.stringify(user || null) %>;
+
+  const prefillSalesData = () => {
+    if (!user) return;
+
+    const fieldsToPrefill = {
+      'sales_name': user.name,
+      'sales_email': user.email,
+      'sales_phone': user.phone,
+    };
+
+    for (const key in fieldsToPrefill) {
+      const input = document.getElementById(`var-${key}`);
+      if (input && !input.value) {
+        input.value = fieldsToPrefill[key];
+      }
+    }
+  };
 
   templateSelect.addEventListener('change', async (e) => {
     const templateId = e.target.value;
@@ -128,6 +146,8 @@
           }
           variableFieldsContainer.appendChild(fieldGroup);
         });
+
+      prefillSalesData();
     } catch (error) {
       variableFieldsContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
     }

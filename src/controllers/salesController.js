@@ -132,6 +132,7 @@ exports.generateSigningLink = async (req, res) => {
 
         if (contractResult.rows.length === 0) {
             return res.status(404).send('找不到該合約');
+        .
         }
         const contract = contractResult.rows[0];
         if (contract.created_by_id !== salesId) {
@@ -243,6 +244,45 @@ exports.updateContract = async (req, res) => {
 
         res.redirect(`/sales/contracts/${id}`);
 
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('伺服器錯誤');
+    }
+};
+
+// 顯示建立新合約的表單
+exports.getNewContractForm = async (req, res) => {
+    try {
+        const templates = await db.query('SELECT id, name FROM contract_templates WHERE is_active = TRUE ORDER BY name ASC');
+        
+        res.render('new-contract', {
+            user: req.session.user,
+            templates: templates.rows,
+            title: '建立新合約'
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('伺服器錯誤');
+    }
+};
+
+// 處理新合約的建立
+exports.createContract = async (req, res) => {
+    try {
+        const { client_name, template_id, variables } = req.body;
+        const salesId = req.session.user.id;
+
+        if (!client_name || !template_id) {
+            return res.status(400).send('客戶名稱與合約範本為必填項目');
+        }
+
+        const result = await db.query(
+            'INSERT INTO contracts (customer_name, template_id, created_by_id, variables, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [client_name, template_id, salesId, variables || {}, 'DRAFT']
+        );
+
+        const newContractId = result.rows[0].id;
+        res.redirect(`/sales/contracts/${newContractId}`);
     } catch (err) {
         console.error(err);
         res.status(500).send('伺服器錯誤');

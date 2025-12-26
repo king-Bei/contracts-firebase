@@ -8,6 +8,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
+  REPOSITORY: ${{ secrets.CLOUD_RUN_SERVICE }} # Use service name as Artifact Registry repo name
   REGION: ${{ secrets.GCP_REGION }}
 
 jobs:
@@ -33,11 +34,11 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Configure Docker auth
-        run: gcloud auth configure-docker --quiet
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Build and push image
         run: |
-          IMAGE="gcr.io/${PROJECT_ID}/${SERVICE}:$GITHUB_SHA"
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:$GITHUB_SHA"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"

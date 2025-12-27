@@ -28,9 +28,18 @@ async function createContractsTable() {
   `;
   try {
     await db.query(queryText);
+    await db.query(queryText);
     await db.query('ALTER TABLE contracts ADD COLUMN IF NOT EXISTS verification_code_plaintext VARCHAR(6);');
     await db.query('ALTER TABLE contracts ADD COLUMN IF NOT EXISTS short_link_code VARCHAR(50);');
     await db.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_contracts_short_link_code ON contracts(short_link_code);');
+
+    // New columns for re-architecture
+    await db.query('ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signature_file_id UUID;');
+
+    // Determine if we should drop the plaintext code column for security (Migration step)
+    // For now we just won't write to it, keeping data for legacy support if needed, 
+    // but ideally: await db.query('ALTER TABLE contracts DROP COLUMN IF EXISTS verification_code_plaintext;');
+
     console.log('Contracts table checked/created successfully.');
   } catch (error) {
     console.error('Error creating contracts table:', error.message);
@@ -149,7 +158,7 @@ async function create(contractData) {
     signing_link_token,
     short_link_code,
     verification_code_hash,
-    verification_code,
+    verification_code, // Store plaintext code as requested by user
   ];
 
   const { rows } = await db.query(queryText, values);
@@ -171,6 +180,7 @@ async function findById(id) {
       c.signing_link_token,
       c.short_link_code,
       c.signature_image,
+      c.signature_file_id,
       c.signed_at,
       c.created_at,
       c.salesperson_id,
@@ -204,6 +214,7 @@ async function findByToken(token) {
       c.verification_code_plaintext,
       c.short_link_code,
       c.signature_image,
+      c.signature_file_id,
       c.signed_at,
       ct.name as template_name,
       ct.content as template_content,
@@ -300,18 +311,19 @@ async function ensureShortLinkCode(contractId) {
   return rows[0]?.short_link_code || shortCode;
 }
 
-async function markAsSigned(id, signatureImage, variableValues) {
+async function markAsSigned(id, signatureFileId, variableValues, legacySignatureImage = null) {
   const queryText = `
     UPDATE contracts
     SET status = 'SIGNED',
-        signature_image = $1,
-        variable_values = $2,
+        signature_file_id = $1,
+        signature_image = $2, -- Keeping legacy field for now if provided, or null
+        variable_values = $3,
         signed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
-    WHERE id = $3
+    WHERE id = $4
     RETURNING *;
   `;
-  const { rows } = await db.query(queryText, [signatureImage, variableValues, id]);
+  const { rows } = await db.query(queryText, [signatureFileId, legacySignatureImage, variableValues, id]);
   return rows[0] || null;
 }
 

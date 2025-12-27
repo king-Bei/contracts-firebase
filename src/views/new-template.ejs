@@ -1,187 +1,203 @@
 <%- include('partials/header') %>
 
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <a href="/admin" class="btn btn-outline-secondary btn-sm">返回管理首頁</a>
-            <h1 class="mb-0">建立新合約範本</h1>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <a href="/admin" class="btn btn-outline-secondary btn-sm">返回管理首頁</a>
+                <h1 class="mb-0">建立新合約範本</h1>
+            </div>
+            <a href="/admin/templates" class="btn btn-outline-secondary">返回範本列表</a>
         </div>
-        <a href="/admin/templates" class="btn btn-outline-secondary">返回範本列表</a>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form action="/admin/templates/new" method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">合約屬性</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="logo_url" class="form-label">公司 LOGO 圖片網址（選填）</label>
+                        <input type="url" class="form-control" id="logo_url" name="logo_url"
+                            placeholder="https://example.com/logo.png">
+                        <div class="form-text">簽署頁與預覽會顯示於合約內容上方，可使用對外可存取的圖片網址。</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="content" class="form-label">合約內容</label>
+                        <p class="form-text">
+                            使用 <code>{{variable_name}}</code>
+                            格式插入變數（例：<code>{{client_name}}</code>）。可直接編輯或上傳檔案填入內容，亦可插入圖片。
+                        </p>
+                        <div class="btn-toolbar mb-2" role="toolbar" aria-label="HTML 編輯工具">
+                            <div class="btn-group me-2" role="group" aria-label="文字樣式">
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="bold">粗體</button>
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="italic">斜體</button>
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="underline">底線</button>
+                            </div>
+                            <div class="btn-group me-2" role="group" aria-label="對齊">
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="justifyLeft">置左</button>
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="justifyCenter">置中</button>
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="justifyRight">置右</button>
+                            </div>
+                            <div class="btn-group me-2" role="group" aria-label="列表">
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="insertUnorderedList">項目清單</button>
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="insertOrderedList">編號清單</button>
+                            </div>
+                            <div class="btn-group me-2" role="group" aria-label="連結">
+                                <button type="button" class="btn btn-light btn-sm" id="insert-link">插入連結</button>
+                                <button type="button" class="btn btn-light btn-sm editor-btn"
+                                    data-command="unlink">移除連結</button>
+                            </div>
+                            <div class="input-group input-group-sm w-auto me-2">
+                                <label class="input-group-text" for="font-size-select">字級</label>
+                                <select class="form-select" id="font-size-select">
+                                    <option value="">預設</option>
+                                    <option value="14">14px</option>
+                                    <option value="16">16px</option>
+                                    <option value="18">18px</option>
+                                    <option value="20">20px</option>
+                                    <option value="24">24px</option>
+                                    <option value="28">28px</option>
+                                    <option value="32">32px</option>
+                                </select>
+                            </div>
+                            <div class="btn-group" role="group" aria-label="模式">
+                                <button type="button" class="btn btn-outline-dark btn-sm"
+                                    id="toggle-html-view">切換原始碼</button>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column flex-md-row gap-2 mb-2">
+                            <input type="file" accept=".txt,.html,.htm" class="form-control" id="content-upload">
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-outline-secondary"
+                                    id="detect-variables">從內容偵測變數</button>
+                                <button type="button" class="btn btn-outline-primary" id="insert-image">插入圖片</button>
+                            </div>
+                        </div>
+                        <textarea class="form-control font-monospace d-none" id="html-source"
+                            style="min-height: 260px;"></textarea>
+                        <div id="content-editor" class="form-control bg-light content-editor" style="min-height: 280px;"
+                            contenteditable="true"></div>
+                        <textarea class="d-none" id="content" name="content"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <h5 class="mt-4">範本變數</h5>
+                        <p class="form-text">
+                            定義在合約內容中使用的變數。請為每個變數提供唯一「變數名稱」(英文，無空格) 和「顯示標籤」，並可指定輸入型態（單行、多行、勾選、數字、日期或下拉選單），可拖曳或按上下鍵調整順序。
+                        </p>
+                        <div id="variables-container">
+                            <!-- Dynamic fields will be inserted here -->
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                            <button type="button" class="btn btn-outline-secondary" id="add-variable">新增變數</button>
+                            <button type="button" class="btn btn-outline-primary"
+                                id="insert-placeholder">插入選擇的變數佔位符</button>
+                        </div>
+                    </div>
+
+                    <input type="hidden" name="variables" id="variables-json">
+
+                    <div class="d-flex justify-content-end">
+                        <a href="/admin/templates" class="btn btn-secondary me-2">取消</a>
+                        <button type="submit" class="btn btn-primary">儲存範本</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <form action="/admin/templates/new" method="POST">
-                <div class="mb-3">
-                    <label for="name" class="form-label">合約屬性</label>
-                    <input type="text" class="form-control" id="name" name="name" required>
-                </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const variablesContainer = document.getElementById('variables-container');
+            const addVariableButton = document.getElementById('add-variable');
+            const variablesJsonInput = document.getElementById('variables-json');
+            const form = document.querySelector('form');
+            const contentEditor = document.getElementById('content-editor');
+            const contentInput = document.getElementById('content');
+            const uploadInput = document.getElementById('content-upload');
+            const detectButton = document.getElementById('detect-variables');
+            const insertPlaceholderButton = document.getElementById('insert-placeholder');
+            const insertImageButton = document.getElementById('insert-image');
+            const toggleHtmlButton = document.getElementById('toggle-html-view');
+            const htmlSource = document.getElementById('html-source');
+            const insertLinkButton = document.getElementById('insert-link');
+            const editorCommandButtons = document.querySelectorAll('.editor-btn');
+            const fontSizeSelect = document.getElementById('font-size-select');
 
-                <div class="mb-3">
-                    <label for="logo_url" class="form-label">公司 LOGO 圖片網址（選填）</label>
-                    <input type="url" class="form-control" id="logo_url" name="logo_url" placeholder="https://example.com/logo.png">
-                    <div class="form-text">簽署頁與預覽會顯示於合約內容上方，可使用對外可存取的圖片網址。</div>
-                </div>
+            let variableCount = 0;
+            let isHtmlMode = false;
 
-                <div class="mb-3">
-                    <label for="content" class="form-label">合約內容</label>
-                    <p class="form-text">
-                        使用 <code>{{variable_name}}</code> 格式插入變數（例：<code>{{client_name}}</code>）。可直接編輯或上傳檔案填入內容，亦可插入圖片。
-                    </p>
-                    <div class="btn-toolbar mb-2" role="toolbar" aria-label="HTML 編輯工具">
-                        <div class="btn-group me-2" role="group" aria-label="文字樣式">
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="bold">粗體</button>
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="italic">斜體</button>
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="underline">底線</button>
-                        </div>
-                        <div class="btn-group me-2" role="group" aria-label="對齊">
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="justifyLeft">置左</button>
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="justifyCenter">置中</button>
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="justifyRight">置右</button>
-                        </div>
-                        <div class="btn-group me-2" role="group" aria-label="列表">
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="insertUnorderedList">項目清單</button>
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="insertOrderedList">編號清單</button>
-                        </div>
-                        <div class="btn-group me-2" role="group" aria-label="連結">
-                            <button type="button" class="btn btn-light btn-sm" id="insert-link">插入連結</button>
-                            <button type="button" class="btn btn-light btn-sm editor-btn" data-command="unlink">移除連結</button>
-                        </div>
-                        <div class="input-group input-group-sm w-auto me-2">
-                            <label class="input-group-text" for="font-size-select">字級</label>
-                            <select class="form-select" id="font-size-select">
-                                <option value="">預設</option>
-                                <option value="14">14px</option>
-                                <option value="16">16px</option>
-                                <option value="18">18px</option>
-                                <option value="20">20px</option>
-                                <option value="24">24px</option>
-                                <option value="28">28px</option>
-                                <option value="32">32px</option>
-                            </select>
-                        </div>
-                        <div class="btn-group" role="group" aria-label="模式">
-                            <button type="button" class="btn btn-outline-dark btn-sm" id="toggle-html-view">切換原始碼</button>
-                        </div>
-                    </div>
-                    <div class="d-flex flex-column flex-md-row gap-2 mb-2">
-                        <input type="file" accept=".txt,.html,.htm" class="form-control" id="content-upload">
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-outline-secondary" id="detect-variables">從內容偵測變數</button>
-                            <button type="button" class="btn btn-outline-primary" id="insert-image">插入圖片</button>
-                        </div>
-                    </div>
-                    <textarea class="form-control font-monospace d-none" id="html-source" style="min-height: 260px;"></textarea>
-                    <div id="content-editor" class="form-control bg-light content-editor" style="min-height: 280px;" contenteditable="true"></div>
-                    <textarea class="d-none" id="content" name="content"></textarea>
-                </div>
+            function setEditorContent(html) {
+                const value = html || '';
+                contentEditor.innerHTML = value;
+                htmlSource.value = value;
+            }
 
-                <div class="mb-3">
-                    <h5 class="mt-4">範本變數</h5>
-                    <p class="form-text">
-                        定義在合約內容中使用的變數。請為每個變數提供唯一「變數名稱」(英文，無空格) 和「顯示標籤」，並可指定輸入型態（單行、多行、勾選、數字、日期或下拉選單），可拖曳或按上下鍵調整順序。
-                    </p>
-                    <div id="variables-container">
-                        <!-- Dynamic fields will be inserted here -->
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 mt-2">
-                        <button type="button" class="btn btn-outline-secondary" id="add-variable">新增變數</button>
-                        <button type="button" class="btn btn-outline-primary" id="insert-placeholder">插入選擇的變數佔位符</button>
-                    </div>
-                </div>
-                
-                <input type="hidden" name="variables" id="variables-json">
+            function getEditorContent() {
+                const raw = isHtmlMode ? htmlSource.value : contentEditor.innerHTML;
+                return (raw || '').trim();
+            }
 
-                <div class="d-flex justify-content-end">
-                    <a href="/admin/templates" class="btn btn-secondary me-2">取消</a>
-                    <button type="submit" class="btn btn-primary">儲存範本</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+            function syncContentToInput() {
+                contentInput.value = isHtmlMode ? (htmlSource.value || '') : (contentEditor.innerHTML || '');
+            }
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const variablesContainer = document.getElementById('variables-container');
-    const addVariableButton = document.getElementById('add-variable');
-    const variablesJsonInput = document.getElementById('variables-json');
-    const form = document.querySelector('form');
-    const contentEditor = document.getElementById('content-editor');
-    const contentInput = document.getElementById('content');
-    const uploadInput = document.getElementById('content-upload');
-    const detectButton = document.getElementById('detect-variables');
-    const insertPlaceholderButton = document.getElementById('insert-placeholder');
-    const insertImageButton = document.getElementById('insert-image');
-    const toggleHtmlButton = document.getElementById('toggle-html-view');
-    const htmlSource = document.getElementById('html-source');
-    const insertLinkButton = document.getElementById('insert-link');
-    const editorCommandButtons = document.querySelectorAll('.editor-btn');
-    const fontSizeSelect = document.getElementById('font-size-select');
+            function insertAtCursor(field, text) {
+                const start = field.selectionStart ?? field.value.length;
+                const end = field.selectionEnd ?? field.value.length;
+                const before = field.value.slice(0, start);
+                const after = field.value.slice(end);
+                field.value = `${before}${text}${after}`;
+                const pos = start + text.length;
+                field.setSelectionRange(pos, pos);
+                field.focus();
+            }
 
-    let variableCount = 0;
-    let isHtmlMode = false;
+            function toggleHtmlView() {
+                if (isHtmlMode) {
+                    contentEditor.innerHTML = htmlSource.value || '';
+                    htmlSource.classList.add('d-none');
+                    contentEditor.classList.remove('d-none');
+                    toggleHtmlButton.textContent = '切換原始碼';
+                    isHtmlMode = false;
+                    contentEditor.focus();
+                    return;
+                }
+                htmlSource.value = contentEditor.innerHTML.trim();
+                htmlSource.classList.remove('d-none');
+                contentEditor.classList.add('d-none');
+                toggleHtmlButton.textContent = '返回設計視圖';
+                isHtmlMode = true;
+                htmlSource.focus();
+            }
 
-    function setEditorContent(html) {
-        const value = html || '';
-        contentEditor.innerHTML = value;
-        htmlSource.value = value;
-    }
+            function runCommand(command, value = null) {
+                if (isHtmlMode) {
+                    alert('請先切換回設計視圖再使用工具列。');
+                    htmlSource.focus();
+                    return;
+                }
+                contentEditor.focus();
+                document.execCommand(command, false, value);
+                htmlSource.value = contentEditor.innerHTML;
+            }
 
-    function getEditorContent() {
-        const raw = isHtmlMode ? htmlSource.value : contentEditor.innerHTML;
-        return (raw || '').trim();
-    }
-
-    function syncContentToInput() {
-        contentInput.value = isHtmlMode ? (htmlSource.value || '') : (contentEditor.innerHTML || '');
-    }
-
-    function insertAtCursor(field, text) {
-        const start = field.selectionStart ?? field.value.length;
-        const end = field.selectionEnd ?? field.value.length;
-        const before = field.value.slice(0, start);
-        const after = field.value.slice(end);
-        field.value = `${before}${text}${after}`;
-        const pos = start + text.length;
-        field.setSelectionRange(pos, pos);
-        field.focus();
-    }
-
-    function toggleHtmlView() {
-        if (isHtmlMode) {
-            contentEditor.innerHTML = htmlSource.value || '';
-            htmlSource.classList.add('d-none');
-            contentEditor.classList.remove('d-none');
-            toggleHtmlButton.textContent = '切換原始碼';
-            isHtmlMode = false;
-            contentEditor.focus();
-            return;
-        }
-        htmlSource.value = contentEditor.innerHTML.trim();
-        htmlSource.classList.remove('d-none');
-        contentEditor.classList.add('d-none');
-        toggleHtmlButton.textContent = '返回設計視圖';
-        isHtmlMode = true;
-        htmlSource.focus();
-    }
-
-    function runCommand(command, value = null) {
-        if (isHtmlMode) {
-            alert('請先切換回設計視圖再使用工具列。');
-            htmlSource.focus();
-            return;
-        }
-        contentEditor.focus();
-        document.execCommand(command, false, value);
-        htmlSource.value = contentEditor.innerHTML;
-    }
-
-    function addVariableRow(key = '', label = '', type = 'text', options = '', isCustomerFillable = false, isRequired = false) {
-        variableCount++;
-        const row = document.createElement('div');
-        row.classList.add('row', 'mb-3', 'g-2', 'align-items-center', 'variable-row', 'p-2', 'border', 'rounded');
-        row.innerHTML = `
+            function addVariableRow(key = '', label = '', type = 'text', options = '', isCustomerFillable = false, isRequired = false) {
+                variableCount++;
+                const row = document.createElement('div');
+                row.classList.add('row', 'mb-3', 'g-2', 'align-items-center', 'variable-row', 'p-2', 'border', 'rounded');
+                row.innerHTML = `
             <div class="col-md-2">
                 <label class="form-label small">變數名稱</label>
                 <input type="text" class="form-control" placeholder="client_name" name="var_key_${variableCount}" value="${key}" required>
@@ -199,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     <option value="number" ${type === 'number' ? 'selected' : ''}>數字</option>
                     <option value="date" ${type === 'date' ? 'selected' : ''}>日期</option>
                     <option value="select" ${type === 'select' ? 'selected' : ''}>下拉選單</option>
+                    <option value="image" ${type === 'image' ? 'selected' : ''}>圖片</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -223,241 +240,241 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
             </div>
         `;
-        variablesContainer.appendChild(row);
+                variablesContainer.appendChild(row);
 
-        const typeSelect = row.querySelector(`select[name="var_type_${variableCount}"]`);
-        const optionsInput = row.querySelector(`input[name="var_options_${variableCount}"]`);
-        typeSelect.addEventListener('change', (e) => {
-            optionsInput.disabled = e.target.value !== 'select';
-            if (e.target.value !== 'select') {
-                optionsInput.value = '';
+                const typeSelect = row.querySelector(`select[name="var_type_${variableCount}"]`);
+                const optionsInput = row.querySelector(`input[name="var_options_${variableCount}"]`);
+                typeSelect.addEventListener('change', (e) => {
+                    optionsInput.disabled = e.target.value !== 'select';
+                    if (e.target.value !== 'select') {
+                        optionsInput.value = '';
+                    }
+                });
+
+                const customerFillCheck = row.querySelector(`input[name="var_customer_fill_${variableCount}"]`);
+                const isRequiredCheck = row.querySelector(`input[name="var_is_required_${variableCount}"]`);
+                customerFillCheck.addEventListener('change', (e) => {
+                    isRequiredCheck.disabled = !e.target.checked;
+                    if (!e.target.checked) {
+                        isRequiredCheck.checked = false;
+                    }
+                });
             }
+
+            addVariableButton.addEventListener('click', () => addVariableRow());
+
+            variablesContainer.addEventListener('click', function (e) {
+                const row = e.target.closest('.variable-row');
+                if (!row) return;
+                if (e.target.classList.contains('remove-variable')) {
+                    row.remove();
+                }
+                if (e.target.classList.contains('move-up')) {
+                    const prev = row.previousElementSibling;
+                    if (prev) variablesContainer.insertBefore(row, prev);
+                }
+                if (e.target.classList.contains('move-down')) {
+                    const next = row.nextElementSibling;
+                    if (next) variablesContainer.insertBefore(next, row);
+                }
+            });
+
+            uploadInput.addEventListener('change', function (e) {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const result = evt.target?.result || '';
+                    const isHtml = (file.type && file.type.includes('html')) || /\.html?$/i.test(file.name || '');
+                    if (isHtml) {
+                        setEditorContent(result);
+                    } else {
+                        contentEditor.innerText = result;
+                        htmlSource.value = contentEditor.innerHTML;
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            contentEditor.addEventListener('input', () => {
+                if (!isHtmlMode) {
+                    htmlSource.value = contentEditor.innerHTML;
+                }
+            });
+
+            htmlSource.addEventListener('input', () => {
+                if (isHtmlMode) {
+                    contentEditor.innerHTML = htmlSource.value;
+                }
+            });
+
+            function extractPlaceholders(text) {
+                const matches = [...(text || '').matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)];
+                return Array.from(new Set(matches.map(m => m[1])));
+            }
+
+            detectButton.addEventListener('click', function () {
+                const placeholders = extractPlaceholders(getEditorContent());
+                if (!placeholders.length) {
+                    alert('未找到符合 {{placeholder}} 格式的變數。');
+                    return;
+                }
+                const existingKeys = new Set(
+                    Array.from(variablesContainer.querySelectorAll('input[name^="var_key_"]'))
+                        .map(input => input.value.trim())
+                        .filter(Boolean)
+                );
+                let created = 0;
+                placeholders.forEach(key => {
+                    if (!existingKeys.has(key)) {
+                        addVariableRow(key, key, 'text', '', false, false);
+                        created++;
+                    }
+                });
+                alert(created > 0 ? `已加入 ${created} 個新變數。` : '所有偵測到的變數都已存在。');
+            });
+
+            editorCommandButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const command = btn.dataset.command;
+                    if (!command) return;
+                    runCommand(command);
+                });
+            });
+
+            insertLinkButton.addEventListener('click', () => {
+                const url = prompt('請輸入連結網址 (含 http/https)');
+                if (!url) return;
+                if (isHtmlMode) {
+                    const label = prompt('連結文字（選填，預設為網址）') || url;
+                    insertAtCursor(htmlSource, `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+                    return;
+                }
+                runCommand('createLink', url);
+            });
+
+            toggleHtmlButton.addEventListener('click', toggleHtmlView);
+
+            insertPlaceholderButton.addEventListener('click', function () {
+                const keys = Array.from(variablesContainer.querySelectorAll('input[name^="var_key_"]'))
+                    .map(input => input.value.trim())
+                    .filter(Boolean);
+                if (!keys.length) {
+                    alert('請先新增至少一個變數。');
+                    return;
+                }
+                const suggestion = keys[0];
+                const selected = prompt('要插入的變數名稱（系統會自動加上 {{ }}）', suggestion);
+                if (!selected) return;
+                const placeholder = `{{${selected}}}`;
+                if (isHtmlMode) {
+                    insertAtCursor(htmlSource, placeholder);
+                    return;
+                }
+                runCommand('insertText', placeholder);
+            });
+
+            insertImageButton.addEventListener('click', function () {
+                const url = prompt('請輸入圖片網址');
+                if (!url) return;
+                const alt = prompt('圖片說明（選填）') || '';
+                const imgTag = `<img src="${url}" alt="${alt}" style="max-width: 100%;">`;
+                if (isHtmlMode) {
+                    insertAtCursor(htmlSource, imgTag);
+                    return;
+                }
+                runCommand('insertHTML', imgTag);
+            });
+
+            fontSizeSelect.addEventListener('change', () => {
+                const size = fontSizeSelect.value;
+                if (!size) {
+                    runCommand('removeFormat');
+                    return;
+                }
+                if (isHtmlMode) {
+                    alert('請先切換回設計視圖再套用字級。');
+                    htmlSource.focus();
+                    return;
+                }
+                const selection = window.getSelection();
+                const text = selection?.toString();
+                const span = document.createElement('span');
+                span.style.fontSize = `${size}px`;
+                span.textContent = text || '文字';
+                runCommand('insertHTML', span.outerHTML);
+            });
+
+            setEditorContent(contentInput.value || '');
+            syncContentToInput();
+
+            form.addEventListener('submit', function (e) {
+                const variables = [];
+                const variableRows = variablesContainer.querySelectorAll('.variable-row');
+                let isValid = true;
+                const variableKeys = new Set();
+
+                for (const row of variableRows) {
+                    const keyInput = row.querySelector('input[name^="var_key_"]');
+                    const labelInput = row.querySelector('input[name^="var_label_"]');
+                    const typeInput = row.querySelector('select[name^="var_type_"]');
+                    const optionsInput = row.querySelector('input[name^="var_options_"]');
+                    const customerFillInput = row.querySelector('input[name^="var_customer_fill_"]');
+                    const isRequiredInput = row.querySelector('input[name^="var_is_required_"]');
+
+                    const key = keyInput.value.trim();
+                    const label = labelInput.value.trim();
+                    const type = (typeInput?.value || 'text').toLowerCase();
+                    const rawOptions = (optionsInput?.value || '').trim();
+                    const isCustomerFillable = customerFillInput.checked;
+                    const isRequired = isRequiredInput.checked;
+
+                    if (!key || !label) continue;
+
+                    if (!/^[a-zA-Z0-9_]+$/.test(key)) {
+                        alert(`變數名稱 "${key}" 格式錯誤，只能包含英文字母、數字和底線，且不能有空格。`);
+                        keyInput.focus();
+                        isValid = false;
+                        break;
+                    }
+
+                    if (variableKeys.has(key)) {
+                        alert(`偵測到重複的變數名稱 "${key}"，請確保每個變數名稱都是唯一的。`);
+                        keyInput.focus();
+                        isValid = false;
+                        break;
+                    }
+                    variableKeys.add(key);
+
+                    const normalizedType = ['text', 'textarea', 'checkbox', 'number', 'date', 'select', 'image'].includes(type) ? type : 'text';
+                    const options = normalizedType === 'select'
+                        ? rawOptions.split(',').map(v => v.trim()).filter(Boolean)
+                        : undefined;
+
+                    if (normalizedType === 'select' && (!options || options.length === 0)) {
+                        alert(`變數 "${key}" 的型態為下拉選單，但未提供任何選項。`);
+                        optionsInput.focus();
+                        isValid = false;
+                        break;
+                    }
+
+                    variables.push({ key, label, type: normalizedType, options, isCustomerFillable, isRequired });
+                }
+
+                if (!isValid) {
+                    e.preventDefault();
+                    return;
+                }
+
+                syncContentToInput();
+                if (!contentInput.value.trim()) {
+                    alert('請填寫合約內容');
+                    e.preventDefault();
+                    return;
+                }
+                variablesJsonInput.value = JSON.stringify(variables);
+            });
         });
+    </script>
 
-        const customerFillCheck = row.querySelector(`input[name="var_customer_fill_${variableCount}"]`);
-        const isRequiredCheck = row.querySelector(`input[name="var_is_required_${variableCount}"]`);
-        customerFillCheck.addEventListener('change', (e) => {
-            isRequiredCheck.disabled = !e.target.checked;
-            if (!e.target.checked) {
-                isRequiredCheck.checked = false;
-            }
-        });
-    }
-
-    addVariableButton.addEventListener('click', () => addVariableRow());
-
-    variablesContainer.addEventListener('click', function (e) {
-        const row = e.target.closest('.variable-row');
-        if (!row) return;
-        if (e.target.classList.contains('remove-variable')) {
-            row.remove();
-        }
-        if (e.target.classList.contains('move-up')) {
-            const prev = row.previousElementSibling;
-            if (prev) variablesContainer.insertBefore(row, prev);
-        }
-        if (e.target.classList.contains('move-down')) {
-            const next = row.nextElementSibling;
-            if (next) variablesContainer.insertBefore(next, row);
-        }
-    });
-
-    uploadInput.addEventListener('change', function (e) {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            const result = evt.target?.result || '';
-            const isHtml = (file.type && file.type.includes('html')) || /\.html?$/i.test(file.name || '');
-            if (isHtml) {
-                setEditorContent(result);
-            } else {
-                contentEditor.innerText = result;
-                htmlSource.value = contentEditor.innerHTML;
-            }
-        };
-        reader.readAsText(file);
-    });
-
-    contentEditor.addEventListener('input', () => {
-        if (!isHtmlMode) {
-            htmlSource.value = contentEditor.innerHTML;
-        }
-    });
-
-    htmlSource.addEventListener('input', () => {
-        if (isHtmlMode) {
-            contentEditor.innerHTML = htmlSource.value;
-        }
-    });
-
-    function extractPlaceholders(text) {
-        const matches = [...(text || '').matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)];
-        return Array.from(new Set(matches.map(m => m[1])));
-    }
-
-    detectButton.addEventListener('click', function () {
-        const placeholders = extractPlaceholders(getEditorContent());
-        if (!placeholders.length) {
-            alert('未找到符合 {{placeholder}} 格式的變數。');
-            return;
-        }
-        const existingKeys = new Set(
-            Array.from(variablesContainer.querySelectorAll('input[name^="var_key_"]'))
-                .map(input => input.value.trim())
-                .filter(Boolean)
-        );
-        let created = 0;
-        placeholders.forEach(key => {
-            if (!existingKeys.has(key)) {
-                addVariableRow(key, key, 'text', '', false, false);
-                created++;
-            }
-        });
-        alert(created > 0 ? `已加入 ${created} 個新變數。` : '所有偵測到的變數都已存在。');
-    });
-
-    editorCommandButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const command = btn.dataset.command;
-            if (!command) return;
-            runCommand(command);
-        });
-    });
-
-    insertLinkButton.addEventListener('click', () => {
-        const url = prompt('請輸入連結網址 (含 http/https)');
-        if (!url) return;
-        if (isHtmlMode) {
-            const label = prompt('連結文字（選填，預設為網址）') || url;
-            insertAtCursor(htmlSource, `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
-            return;
-        }
-        runCommand('createLink', url);
-    });
-
-    toggleHtmlButton.addEventListener('click', toggleHtmlView);
-
-    insertPlaceholderButton.addEventListener('click', function () {
-        const keys = Array.from(variablesContainer.querySelectorAll('input[name^="var_key_"]'))
-            .map(input => input.value.trim())
-            .filter(Boolean);
-        if (!keys.length) {
-            alert('請先新增至少一個變數。');
-            return;
-        }
-        const suggestion = keys[0];
-        const selected = prompt('要插入的變數名稱（系統會自動加上 {{ }}）', suggestion);
-        if (!selected) return;
-        const placeholder = `{{${selected}}}`;
-        if (isHtmlMode) {
-            insertAtCursor(htmlSource, placeholder);
-            return;
-        }
-        runCommand('insertText', placeholder);
-    });
-
-    insertImageButton.addEventListener('click', function () {
-        const url = prompt('請輸入圖片網址');
-        if (!url) return;
-        const alt = prompt('圖片說明（選填）') || '';
-        const imgTag = `<img src="${url}" alt="${alt}" style="max-width: 100%;">`;
-        if (isHtmlMode) {
-            insertAtCursor(htmlSource, imgTag);
-            return;
-        }
-        runCommand('insertHTML', imgTag);
-    });
-
-    fontSizeSelect.addEventListener('change', () => {
-        const size = fontSizeSelect.value;
-        if (!size) {
-            runCommand('removeFormat');
-            return;
-        }
-        if (isHtmlMode) {
-            alert('請先切換回設計視圖再套用字級。');
-            htmlSource.focus();
-            return;
-        }
-        const selection = window.getSelection();
-        const text = selection?.toString();
-        const span = document.createElement('span');
-        span.style.fontSize = `${size}px`;
-        span.textContent = text || '文字';
-        runCommand('insertHTML', span.outerHTML);
-    });
-
-    setEditorContent(contentInput.value || '');
-    syncContentToInput();
-
-    form.addEventListener('submit', function (e) {
-        const variables = [];
-        const variableRows = variablesContainer.querySelectorAll('.variable-row');
-        let isValid = true;
-        const variableKeys = new Set();
-
-        for (const row of variableRows) {
-            const keyInput = row.querySelector('input[name^="var_key_"]');
-            const labelInput = row.querySelector('input[name^="var_label_"]');
-            const typeInput = row.querySelector('select[name^="var_type_"]');
-            const optionsInput = row.querySelector('input[name^="var_options_"]');
-            const customerFillInput = row.querySelector('input[name^="var_customer_fill_"]');
-            const isRequiredInput = row.querySelector('input[name^="var_is_required_"]');
-            
-            const key = keyInput.value.trim();
-            const label = labelInput.value.trim();
-            const type = (typeInput?.value || 'text').toLowerCase();
-            const rawOptions = (optionsInput?.value || '').trim();
-            const isCustomerFillable = customerFillInput.checked;
-            const isRequired = isRequiredInput.checked;
-
-            if (!key || !label) continue;
-
-            if (!/^[a-zA-Z0-9_]+$/.test(key)) {
-                alert(`變數名稱 "${key}" 格式錯誤，只能包含英文字母、數字和底線，且不能有空格。`);
-                keyInput.focus();
-                isValid = false;
-                break;
-            }
-
-            if (variableKeys.has(key)) {
-                alert(`偵測到重複的變數名稱 "${key}"，請確保每個變數名稱都是唯一的。`);
-                keyInput.focus();
-                isValid = false;
-                break;
-            }
-            variableKeys.add(key);
-
-            const normalizedType = ['text', 'textarea', 'checkbox', 'number', 'date', 'select'].includes(type) ? type : 'text';
-            const options = normalizedType === 'select'
-                ? rawOptions.split(',').map(v => v.trim()).filter(Boolean)
-                : undefined;
-
-            if (normalizedType === 'select' && (!options || options.length === 0)) {
-                alert(`變數 "${key}" 的型態為下拉選單，但未提供任何選項。`);
-                optionsInput.focus();
-                isValid = false;
-                break;
-            }
-
-            variables.push({ key, label, type: normalizedType, options, isCustomerFillable, isRequired });
-        }
-
-        if (!isValid) {
-            e.preventDefault();
-            return;
-        }
-
-        syncContentToInput();
-        if (!contentInput.value.trim()) {
-            alert('請填寫合約內容');
-            e.preventDefault();
-            return;
-        }
-        variablesJsonInput.value = JSON.stringify(variables);
-    });
-});
-</script>
-
-<%- include('partials/footer') %>
+    <%- include('partials/footer') %>

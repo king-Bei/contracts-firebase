@@ -13,10 +13,20 @@ const bcrypt = require('bcryptjs');
 const https = require('https');
 const PDFDocument = require('pdfkit');
 const { google } = require('googleapis');
+const multer = require('multer');
+const sharp = require('sharp');
+const crypto = require('crypto');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // Limit 5MB
+});
 
 const userModel = require('./models/userModel');
 const contractTemplateModel = require('./models/contractTemplateModel');
 const contractModel = require('./models/contractModel');
+const fileModel = require('./models/fileModel');
+const auditLogModel = require('./models/auditLogModel');
 
 const app = express();
 // 在 Cloud Run 或其他代理後端運行時，必須信任 proxy 才能正確設定 secure cookie
@@ -37,8 +47,8 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // --- 中介軟體 (Middleware) ---
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 app.use(express.static('public'));
 
@@ -57,7 +67,7 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production', // 在生產環境中應為 true
     httpOnly: true,
-    maxAge: 8 * 60 * 60 * 1000 // 8 小時
+    maxAge: 2 * 60 * 60 * 1000 // 2 小時
   }
 }));
 
@@ -86,7 +96,7 @@ const renderTemplateWithVariables = (content, variableValues, templateVariables,
   const values = (typeof variableValues === 'string')
     ? JSON.parse(variableValues || '{}')
     : (variableValues || {});
-  
+
   const definitions = Array.isArray(templateVariables) ? templateVariables : [];
   const valueMap = new Map(Object.entries(values));
 
@@ -104,16 +114,23 @@ const renderTemplateWithVariables = (content, variableValues, templateVariables,
     let displayValue;
 
     if (item.type === 'checkbox') {
-        const checked = [true, 'true', 'on', 1, '1', 'yes', '已勾選'].includes(value);
-        displayValue = checked ? '已勾選' : '未勾選';
-    } else if (value === undefined || value === null) {
+      const checked = [true, 'true', 'on', 1, '1', 'yes', '已勾選'].includes(value);
+      displayValue = checked ? '已勾選' : '未勾選';
+    } else if (item.type === 'image') {
+      if (value && typeof value === 'string' && value.startsWith('data:image')) {
+        // 限制顯示寬高，避免撐版
+        displayValue = `<img src="${value}" style="max-height: 200px; max-width: 100%;" />`;
+      } else {
         displayValue = '';
+      }
+    } else if (value === undefined || value === null) {
+      displayValue = '';
     } else if (Array.isArray(value)) {
-        displayValue = value.join(', ');
+      displayValue = value.join(', ');
     } else {
-        displayValue = String(value);
+      displayValue = String(value);
     }
-    
+
     if (wrapBold && displayValue && typeof displayValue === 'string' && !displayValue.trim().startsWith('<')) {
       displayValue = `<strong>${displayValue}</strong>`;
     }
@@ -458,9 +475,22 @@ const applyContractPdfContent = async (doc, contract) => {
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const pageHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
   const parts = filledContent.split(SIGN_PLACEHOLDER);
-  const hasSignature = Boolean(contract.signature_image);
+  // Re-architecture: Support signature_file_id
   let sigBuffer = null;
-  if (hasSignature) {
+  const hasSignature = Boolean(contract.signature_image || contract.signature_file_id);
+
+  if (contract.signature_file_id) {
+    try {
+      const fileRecord = await fileModel.getFile(contract.signature_file_id);
+      if (fileRecord && fileRecord.data) {
+        sigBuffer = fileRecord.data;
+      }
+    } catch (err) {
+      console.error('Failed to fetch signature file from DB:', err);
+    }
+  }
+
+  if (!sigBuffer && contract.signature_image) {
     sigBuffer = await fetchImageBuffer(contract.signature_image);
   }
 
@@ -498,8 +528,30 @@ const applyContractPdfContent = async (doc, contract) => {
   }
 };
 
+const getContractEncryptionOptions = (contract) => {
+  // 預設密碼為簽署連結 Token 的後 6 碼，若無則使用 ID
+  // 這樣旅客與業務員都知道密碼（連結在 Email/簡訊中）
+  let passwordSource = contract.signing_token || contract.id || '000000';
+  let password = String(passwordSource).slice(-6);
+
+  return {
+    userPassword: password,
+    ownerPassword: password,
+    permissions: {
+      printing: 'highResolution',
+      modifying: false,
+      copying: false,
+    }
+  };
+};
+
 const streamContractPdf = async (res, contract) => {
-  const doc = new PDFDocument({ margin: 50 });
+  const options = {
+    margin: 50,
+    ...getContractEncryptionOptions(contract),
+  };
+  const doc = new PDFDocument(options);
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="contract-${contract.id}.pdf"`);
   doc.pipe(res);
@@ -509,7 +561,11 @@ const streamContractPdf = async (res, contract) => {
 
 const generateContractPdfBuffer = (contract) => {
   return new Promise(async (resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
+    const options = {
+      margin: 50,
+      ...getContractEncryptionOptions(contract),
+    };
+    const doc = new PDFDocument(options);
     const chunks = [];
 
     doc.on('data', chunk => chunks.push(chunk));
@@ -569,14 +625,32 @@ app.post('/login', async (req, res) => {
   try {
     const user = await userModel.findByEmployeeId(employee_id);
     if (!user || !user.is_active) {
+      // Log failed login attempt (User not found or inactive)
+      auditLogModel.log({
+        user_id: null,
+        action: 'LOGIN_FAILED',
+        resource_id: employee_id, // Log the attempted ID
+        details: { reason: 'User not found or inactive' },
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent')
+      });
       return res.render('login', { title: '登入', error: '員工編號或密碼錯誤。' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      // Log failed login attempt (Invalid password)
+      auditLogModel.log({
+        user_id: user.id,
+        action: 'LOGIN_FAILED',
+        resource_id: user.employee_id,
+        details: { reason: 'Invalid password' },
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent')
+      });
       return res.render('login', { title: '登入', error: '員工編號或密碼錯誤。' });
     }
-    
+
     // 登入成功，將使用者資訊存入 session
     req.session.user = {
       id: user.id,
@@ -584,6 +658,16 @@ app.post('/login', async (req, res) => {
       name: user.name,
       role: user.role,
     };
+
+    // Log successful login
+    auditLogModel.log({
+      user_id: user.id,
+      action: 'LOGIN_SUCCESS',
+      resource_id: user.employee_id,
+      details: {},
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent')
+    });
 
     const redirectPath = user.role === 'admin' ? '/admin' : '/sales';
     res.redirect(redirectPath);
@@ -625,8 +709,8 @@ app.get('/admin', checkAuth, checkAdmin, async (req, res) => {
     });
 
     const salesUsers = users.filter(u => u.role === 'salesperson');
-    res.render('admin', { 
-      title: '管理員後台', 
+    res.render('admin', {
+      title: '管理員後台',
       users: users,
       salesUsers,
       contracts: contracts,
@@ -668,7 +752,7 @@ app.post('/admin/users', checkAuth, checkAdmin, async (req, res) => {
 // 處理停用使用者邏輯
 app.post('/admin/users/deactivate', checkAuth, checkAdmin, async (req, res) => {
   const { userId } = req.body;
-  
+
   // 安全措施：確保管理員不能停用自己
   if (req.session.user.id == userId) {
     console.log(`Admin user ${req.session.user.employee_id} attempted to deactivate themselves.`);
@@ -719,7 +803,7 @@ app.get('/admin/contracts/export', checkAuth, checkAdmin, async (req, res) => {
   try {
     const contracts = await contractModel.findAll();
     const csv = convertToCSV(contracts);
-    
+
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="contracts.csv"');
     res.status(200).send(Buffer.from('\uFEFF' + csv)); // Add BOM for Excel compatibility
@@ -875,7 +959,7 @@ function convertToCSV(data) {
     return 'ID,狀態,客戶名稱,簽署日期,建立日期,業務員,合約屬性\n';
   }
   const headers = Object.keys(data[0]);
-  const rows = data.map(row => 
+  const rows = data.map(row =>
     headers.map(header => JSON.stringify(row[header], (key, value) => value === null ? '' : value)).join(',')
   );
   return [headers.join(','), ...rows].join('\n');
@@ -1326,9 +1410,9 @@ app.post('/contracts/sign/:token/verify', async (req, res) => {
     const canSign = contract.status === 'PENDING_SIGNATURE';
     const previewContent = isContractVerified(req, req.params.token)
       ? renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
-          wrapBold: true,
-          signatureImage: contract.signature_image,
-        })
+        wrapBold: true,
+        signatureImage: contract.signature_image,
+      })
       : null;
 
     const { verification_code } = req.body;
@@ -1368,14 +1452,52 @@ app.post('/contracts/sign/:token/verify', async (req, res) => {
   }
 });
 
-app.post('/contracts/sign/:token', async (req, res) => {
+app.post('/contracts/sign/:token', upload.any(), async (req, res) => {
   try {
     const contract = await contractModel.findByToken(req.params.token);
     if (!contract) {
       return res.status(404).send('簽署連結無效');
     }
 
-    const { agree_terms, signature_data, customer_variables } = req.body;
+    // 因為 multipart/form-data 特性，我們需要手動解析嵌套的欄位名稱
+    const customerVariables = {};
+    const bodyKeys = Object.keys(req.body);
+
+    // 解析文字欄位 (e.g. "customer_variables[foo]")
+    bodyKeys.forEach(key => {
+      const match = key.match(/^customer_variables\[(.+)\]$/);
+      if (match) {
+        customerVariables[match[1]] = req.body[key];
+      }
+    });
+
+    // 處理上傳的檔案 (圖片)
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const match = file.fieldname.match(/^customer_variables\[(.+)\]$/);
+        if (match) {
+          const key = match[1];
+          try {
+            // 使用 sharp 進行壓縮
+            // 轉為 JPEG, 寬度最大 1024, 品質 60%
+            const compressedBuffer = await sharp(file.buffer)
+              .resize({ width: 1024, withoutEnlargement: true })
+              .toFormat('jpeg', { quality: 60 })
+              .toBuffer();
+
+            const base64 = `data:image/jpeg;base64,${compressedBuffer.toString('base64')}`;
+            customerVariables[key] = base64;
+          } catch (err) {
+            console.error(`Failed to compress image for key ${key}:`, err);
+            // 若壓縮失敗，忽略該檔案或視為錯誤？這裡選擇忽略
+          }
+        }
+      }
+    }
+
+    const agree_terms = req.body.agree_terms;
+    const signature_data = req.body.signature_data;
+
     const isVerified = isContractVerified(req, req.params.token);
 
     if (!isVerified) {
@@ -1392,9 +1514,9 @@ app.post('/contracts/sign/:token', async (req, res) => {
     }
 
     const reRenderablePreview = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
-        wrapBold: true,
-        signatureImage: contract.signature_image,
-      });
+      wrapBold: true,
+      signatureImage: contract.signature_image,
+    });
 
     if (contract.status !== 'PENDING_SIGNATURE') {
       return res.render('sign-contract', {
@@ -1434,14 +1556,52 @@ app.post('/contracts/sign/:token', async (req, res) => {
         statusMessage: null,
       });
     }
-    
+
     const existingVariables = contract.variable_values || {};
-    const customerVariables = customer_variables || {};
+    // const customerVariables = customer_variables || {}; // 已在上方解析
     const finalVariables = { ...existingVariables, ...customerVariables };
     const normalizedFinalVariables = normalizeVariableValues(finalVariables, contract.template_variables);
 
-    const updated = await contractModel.markAsSigned(contract.id, signature_data, normalizedFinalVariables);
+    // Re-architecture: Save signature to storage_files
+    let signatureFileId = null;
+    if (signature_data && signature_data.startsWith('data:image')) {
+      try {
+        const matches = signature_data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const mimeType = matches[1];
+          const buffer = Buffer.from(matches[2], 'base64');
+          signatureFileId = crypto.randomUUID();
+
+          await fileModel.saveFile({
+            id: signatureFileId,
+            mime_type: mimeType,
+            data: buffer,
+            size: buffer.length
+          });
+        }
+      } catch (err) {
+        console.error('Failed to save signature file:', err);
+        // Fallback or error? For now proceeded but logged.
+      }
+    }
+
+    const updated = await contractModel.markAsSigned(
+      contract.id,
+      signatureFileId,
+      normalizedFinalVariables,
+      signature_data // Preserve legacy base64 for now as fallback
+    );
     const signedContract = { ...contract, ...updated };
+
+    // Security Audit Log
+    auditLogModel.log({
+      user_id: null, // Public user (client)
+      action: 'SIGN_CONTRACT',
+      resource_id: String(contract.id),
+      details: { client_name: contract.client_name },
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent')
+    });
 
     if (process.env.ENABLE_DRIVE_BACKUP === 'true') {
       try {
@@ -1455,7 +1615,7 @@ app.post('/contracts/sign/:token', async (req, res) => {
     if (req.session.verifiedContracts) {
       delete req.session.verifiedContracts[req.params.token];
     }
-    
+
     const finalPreviewContent = renderTemplateWithVariables(signedContract.template_content, signedContract.variable_values, signedContract.template_variables, {
       wrapBold: true,
       signatureImage: signedContract.signature_image,

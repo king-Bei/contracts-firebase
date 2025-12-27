@@ -13,17 +13,30 @@ function renderContractForSigning(templateContent, templateVariables, variableVa
 
         let replacement = '';
         const currentValue = valueMap.get(key) || '';
+        const isImage = variable.type === 'image';
 
         if (variable.isCustomerFillable) {
-            replacement = `<strong class="text-decoration-underline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</strong>`;
+            if (isImage) {
+                 replacement = `<img id="preview_img_${key}" src="${currentValue || ''}" alt="預覽圖片" style="max-width: 100%; max-height: 200px; display: ${currentValue ? 'inline-block' : 'none'}; border: 1px dashed #ccc;" class="my-2" />`;
+            } else {
+                 replacement = `<span id="preview_text_${key}" class="text-decoration-underline text-primary fw-bold">${currentValue || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span>`;
+            }
         } else {
             let displayValue = currentValue;
-            if (typeof currentValue === 'boolean') {
-                displayValue = currentValue ? '已勾選' : '未勾選';
-            } else if (Array.isArray(currentValue)) {
-                displayValue = currentValue.join(', ');
+            if (isImage) {
+                 if (currentValue && typeof currentValue === 'string' && currentValue.startsWith('data:image')) {
+                     replacement = `<img src="${currentValue}" style="max-width: 100%; max-height: 200px;" />`;
+                 } else {
+                     replacement = '';
+                 }
+            } else {
+                if (typeof currentValue === 'boolean') {
+                    displayValue = currentValue ? '已勾選' : '未勾選';
+                } else if (Array.isArray(currentValue)) {
+                    displayValue = currentValue.join(', ');
+                }
+                replacement = `<strong class="text-decoration-underline">${displayValue || '&nbsp;'}</strong>`;
             }
-            replacement = `<strong class="text-decoration-underline">${displayValue || '&nbsp;'}</strong>`;
         }
         content = content.replace(regex, replacement);
     });
@@ -82,7 +95,7 @@ function renderContractForSigning(templateContent, templateVariables, variableVa
     </div>
 
     <% if (canSign) { %>
-    <form method="POST" action="" onsubmit="return handleSubmit();" id="signing-form">
+    <form method="POST" action="" onsubmit="return handleSubmit();" id="signing-form" enctype="multipart/form-data">
         <% 
         const customerFields = (contract.template_variables || []).filter(v => v.isCustomerFillable);
         if (customerFields.length > 0) {
@@ -118,6 +131,11 @@ function renderContractForSigning(templateContent, templateVariables, variableVa
                                         <option value="<%= opt %>" <%= opt === currentValue ? 'selected' : '' %>><%= opt %></option>
                                     <% }); %>
                                 </select>
+                            <% } else if (variable.type === 'image') { %>
+                                <input type="file" <%= nameAttr %> <%= idAttr %> class="form-control" accept="image/*" <%= requiredAttr %> onchange="previewImage(this, '<%= variable.key %>')">
+                                <% if (currentValue) { %>
+                                    <div class="mt-1 small text-muted">目前已有上傳圖片</div>
+                                <% } %>
                             <% } else { %>
                                 <input type="<%= variable.type || 'text' %>" <%= nameAttr %> <%= idAttr %> class="form-control" value="<%= currentValue %>" <%= requiredAttr %>>
                             <% } %>
@@ -243,8 +261,21 @@ const printPreviewBtn = document.getElementById('print-preview');
 if (printBtn) {
   printBtn.addEventListener('click', () => window.print());
 }
-if (printPreviewBtn) {
   printPreviewBtn.addEventListener('click', () => window.print());
+}
+
+function previewImage(input, key) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = document.getElementById(`preview_img_${key}`);
+      if (img) {
+        img.src = e.target.result;
+        img.style.display = 'inline-block';
+      }
+    }
+    reader.readAsDataURL(input.files[0]);
+  }
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>

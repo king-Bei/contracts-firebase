@@ -146,7 +146,30 @@ app.use((err, req, res, next) => {
   res.status(500).send('伺服器發生內部錯誤');
 });
 
+// --- Database Initialization ---
+const userModel = require('./models/userModel');
+const contractTemplateModel = require('./models/contractTemplateModel');
+const contractModel = require('./models/contractModel');
+const fileModel = require('./models/fileModel');
+
+async function initDb() {
+  try {
+    console.log('Checking/Creating database tables...');
+    await userModel.createUsersTable();
+    await contractTemplateModel.createContractTemplatesTable();
+    await fileModel.createStorageFilesTable();
+    await contractModel.createContractsTable();
+    console.log('Database initialization completed.');
+  } catch (err) {
+    console.error('Database initialization failed:', err);
+    // Don't crash the server, but log heavily. 
+    // In strict environments, process.exit(1) might be better.
+  }
+}
+
 // Server Start
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
 });

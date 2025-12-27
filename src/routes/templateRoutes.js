@@ -1,62 +1,23 @@
-// src/routes/templateRoutes.js
-
 const express = require('express');
-const contractTemplateModel = require('../models/contractTemplateModel');
-
 const router = express.Router();
+const templateController = require('../controllers/templateController');
 
-/**
- * @route   GET /api/templates
- * @desc    取得所有可用的合約範本列表 (供業務員/管理員選用)
- * @access  Private (Authenticated users)
- */
-router.get('/', async (req, res) => {
-  try {
-    // 呼叫 model 中的 findAllActive 函式，它會查詢所有 is_active = TRUE 的範本
-    const templates = await contractTemplateModel.findAllActive();
-    // 回傳簡化的範本列表 (id, name)，方便前端製作下拉選單
-    res.json(templates);
-  } catch (error) {
-    console.error('Error fetching active templates:', error.message);
-    res.status(500).send('伺服器錯誤');
-  }
-});
+// 管理合約範本頁面
+router.get('/', templateController.listTemplates);
 
-/**
- * @route   GET /api/templates/:id
- * @desc    根據 ID 取得單一合約範本的詳細資訊 (包含 variables)
- * @access  Private (Authenticated users)
- */
-router.get('/:id', async (req, res) => {
-  try {
-    const templateId = parseInt(req.params.id, 10);
-    if (isNaN(templateId)) {
-      return res.status(400).json({ message: '無效的範本 ID。' });
-    }
+// 建立新範本頁面
+router.get('/new', templateController.newTemplatePage);
 
-    const template = await contractTemplateModel.findById(templateId);
+// 建立新範本
+router.post('/new', templateController.createTemplate);
 
-    if (!template) {
-      return res.status(404).json({ message: '找不到指定的合約範本。' });
-    }
+// 編輯範本頁面
+router.get('/edit/:id', templateController.editTemplatePage);
 
-    let parsedVariables = template.variables;
-    if (typeof parsedVariables === 'string') {
-      try {
-        parsedVariables = JSON.parse(parsedVariables);
-      } catch (err) {
-        parsedVariables = [];
-      }
-    }
-    if (!Array.isArray(parsedVariables)) {
-      parsedVariables = [];
-    }
+// 更新範本
+router.post('/edit/:id', templateController.updateTemplate);
 
-    res.json({ ...template, variables: parsedVariables });
-  } catch (error) {
-    console.error(`Error fetching template ${req.params.id}:`, error.message);
-    res.status(500).send('伺服器錯誤');
-  }
-});
+// 切換範本狀態
+router.post('/:id/toggle', templateController.toggleTemplate);
 
 module.exports = router;

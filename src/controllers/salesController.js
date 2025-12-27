@@ -1,290 +1,423 @@
-// src/controllers/salesController.js
-const db = require('../db'); // 您的資料庫設定檔
-const crypto = require('crypto'); // Node.js 內建的加密模組
-const bcrypt = require('bcryptjs'); // 用於雜湊驗證碼
+const contractModel = require('../models/contractModel');
+const contractTemplateModel = require('../models/contractTemplateModel');
+const userModel = require('../models/userModel');
+const bcrypt = require('bcryptjs');
+const { normalizeVariableValues, renderTemplateWithVariables } = require('../utils/templateUtils');
 
-// 顯示業務員儀表板
-exports.getDashboard = async (req, res) => {
+const salesDashboard = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
     try {
-        const salesId = req.session.user.id; // 從 session 取得登入者的 ID
+        const flashMessage = req.session.flashMessage || null;
+        delete req.session.flashMessage;
 
-        // 查詢此業務員建立的所有合約，並依建立時間排序
-        const result = await db.query(
-            `SELECT id, customer_name, status, created_at 
-             FROM contracts 
-             WHERE created_by_id = $1 
-             ORDER BY created_at DESC`,
-            [salesId]
-        );
+        const { start_date, end_date, status } = req.query;
+        const defaultStart = new Date();
+        defaultStart.setMonth(defaultStart.getMonth() - 3);
+        const parsedStart = start_date ? new Date(start_date) : defaultStart;
+        const parsedEnd = end_date ? new Date(end_date) : new Date();
+        const startDate = isNaN(parsedStart) ? defaultStart : parsedStart;
+        const endDate = isNaN(parsedEnd) ? new Date() : parsedEnd;
 
-        // 注意：根據您的檔案結構，儀表板檔案是 'sales.ejs'
-        // 如果您將它放在 'views/sales/' 目錄下，請使用 'sales/sales'
-        res.render('sales', {
-            user: req.session.user,
-            contracts: result.rows, // 將查詢結果傳遞給 EJS
-            title: '業務員儀表板'
+        const contracts = await contractModel.findBySalesperson(req.session.user.id, {
+            startDate,
+            endDate,
+            status: status || 'ALL',
         });
-    } catch (err) {
-        console.error('Error fetching dashboard contracts:', err);
-        res.status(500).send('伺服器錯誤');
+
+        res.render('sales', {
+            title: '業務員儀表板',
+            contracts,
+            user: req.session.user,
+            flashMessage,
+            filters: {
+                start_date: startDate.toISOString().slice(0, 10),
+                end_date: endDate.toISOString().slice(0, 10),
+                status: status || 'ALL',
+            },
+        });
+    } catch (error) {
+        console.error('Failed to load sales page:', error);
+        res.status(500).send('無法載入業務員儀表板');
     }
 };
 
-
-// 顯示合約詳情
-exports.getContractDetails = async (req, res) => {
+const newContractPage = async (req, res) => {
     try {
-        console.log(`[getContractDetails] 正在取得合約詳情，ID: ${req.params.id}`);
+        const templates = await contractTemplateModel.findAllActive();
+        res.render('new-contract', { title: '新增合約', templates: templates });
+    } catch (error) {
+        console.error('Failed to load new contract page:', error);
+        res.status(500).send('無法載入新增合約頁面');
+    }
+};
 
-        const { id } = req.params;
-        const salesId = req.session.user.id;
+const changePasswordPage = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
 
-        // 查詢合約，並同時 JOIN 範本資料表以取得範本內容
-        const contractResult = await db.query(
-            `SELECT c.*, t.content as template_content
-             FROM contracts c
-             JOIN contract_templates t ON c.template_id = t.id
-             WHERE c.id = $1`,
-            [id]
-        );
+    const flash = req.session.passwordFlash || null;
+    delete req.session.passwordFlash;
 
-        if (contractResult.rows.length === 0) {
-            console.log(`[getContractDetails] 找不到合約 ID: ${id}`);
-            return res.status(404).send('找不到該合約');
+    res.render('sales/change-password', {
+        title: '變更密碼',
+        user: req.session.user,
+        flash,
+    });
+};
+
+const updatePassword = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
+
+    const { current_password, new_password, confirm_password } = req.body;
+
+    if (!current_password || !new_password || !confirm_password) {
+        req.session.passwordFlash = { type: 'danger', message: '請完整填寫目前密碼與新密碼。' };
+        return res.redirect('/sales/password');
+    }
+
+    if (new_password !== confirm_password) {
+        req.session.passwordFlash = { type: 'warning', message: '兩次輸入的新密碼不一致。' };
+        return res.redirect('/sales/password');
+    }
+
+    if (new_password.length < 8) {
+        req.session.passwordFlash = { type: 'warning', message: '新密碼長度需至少 8 碼。' };
+        return res.redirect('/sales/password');
+    }
+
+    try {
+        const user = await userModel.findByIdWithPassword(req.session.user.id);
+        if (!user || !user.is_active) {
+            req.session.passwordFlash = { type: 'danger', message: '帳號狀態異常，請聯繫管理員。' };
+            return res.redirect('/sales/password');
         }
 
-        const contract = contractResult.rows[0];
-
-        // 權限檢查：確保是合約建立者本人在查看
-        if (contract.created_by_id !== salesId) {
-            console.log(`[getContractDetails] 權限不足，使用者 ${salesId} 嘗試查看合約 ${id}`);
-            return res.status(403).send('權限不足，您無法查看此合約');
+        const isMatch = await bcrypt.compare(current_password, user.password_hash);
+        if (!isMatch) {
+            req.session.passwordFlash = { type: 'danger', message: '目前密碼驗證失敗。' };
+            return res.redirect('/sales/password');
         }
 
-        // 產生預覽內容：將範本中的 {{變數}} 替換為真實資料
-        let previewContent = contract.template_content;
-        if (contract.variables) {
-            for (const key in contract.variables) {
-                const regex = new RegExp(`{{${key}}}`, 'g');
-                previewContent = previewContent.replace(regex, String(contract.variables[key]));
+        await userModel.updatePassword(user.id, new_password);
+        req.session.passwordFlash = { type: 'success', message: '密碼已更新，請使用新密碼登入。' };
+        res.redirect('/sales/password');
+    } catch (error) {
+        console.error('Failed to update password:', error);
+        res.status(500).send('無法更新密碼');
+    }
+};
+
+const bulkContractPage = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
+
+    try {
+        const templates = await contractTemplateModel.findAllActive();
+        const flashMessage = req.session.flashMessage || null;
+        delete req.session.flashMessage;
+
+        res.render('sales/bulk-contracts', {
+            title: '批次新增合約',
+            templates,
+            user: req.session.user,
+            flashMessage,
+        });
+    } catch (error) {
+        console.error('Failed to load bulk contract page:', error);
+        res.status(500).send('無法載入批次新增合約頁面');
+    }
+};
+
+const createBulkContracts = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
+
+    try {
+        const templateId = parseInt(req.body.template_id, 10);
+        if (isNaN(templateId)) {
+            req.session.flashMessage = '請選擇一個有效的範本後再送出。';
+            return res.redirect('/sales/contracts/bulk');
+        }
+
+        const template = await contractTemplateModel.findById(templateId);
+        if (!template || !template.is_active) {
+            req.session.flashMessage = '此範本無法使用，請重新選擇。';
+            return res.redirect('/sales/contracts/bulk');
+        }
+        let templateVariables = [];
+        try {
+            templateVariables = Array.isArray(template.variables) ? template.variables : JSON.parse(template.variables || '[]');
+        } catch (err) {
+            templateVariables = [];
+        }
+
+        let entries = req.body.entries || [];
+        if (!Array.isArray(entries)) {
+            entries = Object.values(entries);
+        }
+
+        const validEntries = entries
+            .map(entry => entry || {})
+            .filter(entry => typeof entry.client_name === 'string' && entry.client_name.trim().length > 0);
+
+        if (!validEntries.length) {
+            req.session.flashMessage = '請至少填寫一位客戶名稱。';
+            return res.redirect('/sales/contracts/bulk');
+        }
+
+        let successCount = 0;
+        const failedClients = [];
+
+        for (const entry of validEntries) {
+            const variableValues = typeof entry.variables === 'object' ? entry.variables : {};
+            const normalizedVariables = normalizeVariableValues(variableValues, templateVariables);
+            try {
+                await contractModel.create({
+                    salesperson_id: req.session.user.id,
+                    template_id: templateId,
+                    client_name: entry.client_name.trim(),
+                    variable_values: normalizedVariables,
+                });
+                successCount++;
+            } catch (err) {
+                console.error('Failed to create contract in bulk:', err);
+                failedClients.push(entry.client_name.trim());
             }
         }
-        
-        // 為了顯示給業務員，我們需要一個臨時的、未加密的驗證碼
-        // 注意：這只在產生連結的當下產生，並未儲存
-        const plainVerificationCode = req.session.lastGeneratedCode || null;
-        delete req.session.lastGeneratedCode; // 顯示一次後就刪除
 
-        console.log(`[getContractDetails] 成功渲染合約詳情頁面，ID: ${id}`);
+        const messages = [];
+        if (successCount) {
+            messages.push(`成功建立 ${successCount} 份合約`);
+        }
+        if (failedClients.length) {
+            messages.push(`未能建立：${failedClients.join(', ')}`);
+        }
+
+        req.session.flashMessage = messages.join('；') || '批次建立已完成';
+        res.redirect('/sales');
+    } catch (error) {
+        console.error('Failed to process bulk contract creation:', error);
+        res.status(500).send('批次建立合約時發生錯誤');
+    }
+};
+
+const createContract = async (req, res) => {
+    try {
+        const { client_name, template_id } = req.body;
+        const variables = typeof req.body.variables === 'object' ? req.body.variables : {};
+        const salesperson_id = req.session.user.id;
+
+        const template = await contractTemplateModel.findById(template_id);
+        if (!template || !template.is_active) {
+            return res.status(400).send('此範本無法使用，請重新選擇。');
+        }
+
+        let templateVariables = [];
+        try {
+            templateVariables = Array.isArray(template.variables) ? template.variables : JSON.parse(template.variables || '[]');
+        } catch (err) {
+            templateVariables = [];
+        }
+        const normalizedVariables = normalizeVariableValues(variables, templateVariables);
+
+        const contractData = {
+            salesperson_id,
+            template_id,
+            client_name,
+            variable_values: normalizedVariables || {},
+        };
+
+        const newContract = await contractModel.create(contractData);
+        req.session.lastGeneratedCode = newContract.verification_code;
+
+        res.redirect(`/sales/contracts/${newContract.id}`);
+
+    } catch (error) {
+        console.error('Failed to create contract:', error);
+        res.status(500).send('無法建立合約');
+    }
+};
+
+const viewContract = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
+    try {
+        let contract = await contractModel.findById(req.params.id);
+        if (!contract) {
+            return res.status(404).send('找不到合約');
+        }
+
+        if (contract.salesperson_id !== req.session.user.id) {
+            return res.status(403).send('您無權檢視此合約');
+        }
+
+        if (!contract.short_link_code) {
+            const shortCode = await contractModel.ensureShortLinkCode(contract.id);
+            contract = { ...contract, short_link_code: shortCode };
+        }
+
+        const previewContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
+            wrapBold: true,
+            signatureImage: contract.signature_image,
+        });
+        const fullShareLink = `${req.protocol}://${req.get('host')}/contracts/sign/${contract.signing_link_token}`;
+        const shortShareLink = `${req.protocol}://${req.get('host')}/s/${contract.short_link_code || contract.signing_link_token}`;
+
+        // Use sales specific view
         res.render('sales/contract-details', {
-            user: req.session.user,
+            title: '合約檢視',
             contract,
             previewContent,
-            plainVerificationCode, // 傳遞給 EJS
-            title: '合約詳情'
+            shareLink: fullShareLink,
+            shortShareLink,
+            user: req.session.user,
         });
-
-    } catch (err) {
-        console.error('[getContractDetails] 伺服器錯誤:', err);
-        res.status(500).send('伺服器錯誤');
+    } catch (error) {
+        console.error('Failed to load contract view:', error);
+        res.status(500).send('無法載入合約資訊');
     }
 };
 
-// 作廢合約 (軟刪除)
-exports.cancelContract = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const salesId = req.session.user.id;
-
-        // 更新資料庫，將狀態設為 'CANCELLED'
-        // 只能作廢 'DRAFT' 或 'PENDING_SIGNATURE' 狀態的合約
-        const result = await db.query(
-            `UPDATE contracts 
-             SET status = 'CANCELLED'
-             WHERE id = $1 
-               AND created_by_id = $2 
-               AND (status = 'DRAFT' OR status = 'PENDING_SIGNATURE')`,
-            [id, salesId]
-        );
-
-        if (result.rowCount === 0) {
-            return res.status(403).send('無法作廢此合約，可能權限不足或合約狀態不符。');
-        }
-
-        res.redirect('/sales');
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('伺服器錯誤');
+const editContractPage = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
     }
-};
 
-// 產生簽署連結
-exports.generateSigningLink = async (req, res) => {
     try {
-        const { id } = req.params;
-        const salesId = req.session.user.id;
-
-        // 再次驗證權限並取得合約
-        const contractResult = await db.query(
-            'SELECT id, created_by_id, status FROM contracts WHERE id = $1',
-            [id]
-        );
-
-        if (contractResult.rows.length === 0) {
-            return res.status(404).send('找不到該合約');
-        .
-        }
-        const contract = contractResult.rows[0];
-        if (contract.created_by_id !== salesId) {
-            return res.status(403).send('權限不足');
-        }
-        if (contract.status !== 'DRAFT') {
-            return res.status(400).send('此合約已產生連結或已完成，無法重複操作');
+        let contract = await contractModel.findById(req.params.id);
+        if (!contract) {
+            return res.status(404).send('找不到合約');
         }
 
-        // 1. 產生一個安全的、隨機的簽署權杖 (token)
-        const signingToken = crypto.randomBytes(32).toString('hex');
-
-        // 2. 產生一個給客戶的、易於輸入的 6 位數字驗證碼
-        const plainVerificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // 3. 將驗證碼進行雜湊，存入資料庫的是雜湊值
-        const salt = await bcrypt.genSalt(10);
-        const verificationCodeHash = await bcrypt.hash(plainVerificationCode, salt);
-
-        // 4. 設定連結的過期時間 (例如：7 天後)
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-
-        // 5. 更新資料庫
-        await db.query(
-            `UPDATE contracts 
-             SET status = 'PENDING_SIGNATURE', 
-                 signing_token = $1, 
-                 verification_code_hash = $2, 
-                 token_expires_at = $3 
-             WHERE id = $4`,
-            [signingToken, verificationCodeHash, expiresAt, id]
-        );
-        
-        // 將明文驗證碼暫存到 session，以便在重導向後顯示給業務員
-        req.session.lastGeneratedCode = plainVerificationCode;
-
-        // 6. 重導向回詳情頁
-        res.redirect(`/sales/contracts/${id}`);
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('伺服器錯誤');
-    }
-};
-
-// 顯示編輯合約的表單
-exports.getEditContractForm = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const salesId = req.session.user.id;
-
-        const contractResult = await db.query('SELECT * FROM contracts WHERE id = $1', [id]);
-
-        if (contractResult.rows.length === 0) {
-            return res.status(404).send('找不到該合約');
+        if (contract.salesperson_id !== req.session.user.id) {
+            return res.status(403).send('您無權編輯此合約');
         }
 
-        const contract = contractResult.rows[0];
-
-        // 權限檢查
-        if (contract.created_by_id !== salesId) {
-            return res.status(403).send('權限不足');
+        if (contract.status === 'SIGNED') {
+            return res.status(400).send('已簽署合約不可修改');
         }
 
-        // 只有草稿狀態才能編輯
-        if (contract.status !== 'DRAFT') {
-            return res.status(400).send('此合約已送出，無法編輯');
+        let templateVariables = [];
+        try {
+            if (Array.isArray(contract.template_variables)) {
+                templateVariables = contract.template_variables;
+            } else if (contract.template_variables) {
+                templateVariables = JSON.parse(contract.template_variables || '[]');
+            }
+        } catch (e) {
+            templateVariables = [];
         }
 
         res.render('sales/edit-contract', {
-            user: req.session.user,
+            title: '編輯合約',
             contract,
-            title: '編輯合約'
-        });
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('伺服器錯誤');
-    }
-};
-
-// 處理合約更新
-exports.updateContract = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const salesId = req.session.user.id;
-        const { customer_name, customer_email, variables } = req.body;
-
-        // 簡單驗證
-        if (!customer_name || !customer_email) {
-            return res.status(400).send('客戶名稱與 Email 為必填項目');
-        }
-
-        let variablesJson;
-        try {
-            variablesJson = variables ? JSON.parse(variables) : {};
-        } catch (e) {
-            return res.status(400).send('變數欄位必須是合法的 JSON 格式');
-        }
-
-        // 更新資料庫，並加上權限檢查 (created_by_id = $5 AND status = 'DRAFT')
-        await db.query(
-            `UPDATE contracts 
-             SET customer_name = $1, customer_email = $2, variables = $3
-             WHERE id = $4 AND created_by_id = $5 AND status = 'DRAFT'`,
-            [customer_name, customer_email, variablesJson, id, salesId]
-        );
-
-        res.redirect(`/sales/contracts/${id}`);
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('伺服器錯誤');
-    }
-};
-
-// 顯示建立新合約的表單
-exports.getNewContractForm = async (req, res) => {
-    try {
-        const templates = await db.query('SELECT id, name FROM contract_templates WHERE is_active = TRUE ORDER BY name ASC');
-        
-        res.render('new-contract', {
+            templateVariables,
             user: req.session.user,
-            templates: templates.rows,
-            title: '建立新合約'
         });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('伺服器錯誤');
+    } catch (error) {
+        console.error('Failed to load edit page:', error);
+        res.status(500).send('無法載入編輯頁面');
     }
 };
 
-// 處理新合約的建立
-exports.createContract = async (req, res) => {
-    try {
-        const { client_name, template_id, variables } = req.body;
-        const salesId = req.session.user.id;
+const updateContract = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
 
-        if (!client_name || !template_id) {
-            return res.status(400).send('客戶名稱與合約範本為必填項目');
+    try {
+        const contract = await contractModel.findById(req.params.id);
+        if (!contract) {
+            return res.status(404).send('找不到合約');
         }
 
-        const result = await db.query(
-            'INSERT INTO contracts (customer_name, template_id, created_by_id, variables, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-            [client_name, template_id, salesId, variables || {}, 'DRAFT']
-        );
+        if (contract.salesperson_id !== req.session.user.id) {
+            return res.status(403).send('您無權編輯此合約');
+        }
 
-        const newContractId = result.rows[0].id;
-        res.redirect(`/sales/contracts/${newContractId}`);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('伺服器錯誤');
+        if (contract.status === 'SIGNED') {
+            return res.status(400).send('已簽署合約不可修改');
+        }
+
+        const updatedVariables = typeof req.body.variables === 'object' ? req.body.variables : {};
+
+        let templateVariables = [];
+        try {
+            if (Array.isArray(contract.template_variables)) {
+                templateVariables = contract.template_variables;
+            } else if (contract.template_variables) {
+                templateVariables = JSON.parse(contract.template_variables || '[]');
+            }
+        } catch (err) {
+            templateVariables = [];
+        }
+
+        const normalizedVariables = normalizeVariableValues(updatedVariables, templateVariables);
+
+        await contractModel.update(contract.id, {
+            client_name: req.body.client_name,
+            variable_values: normalizedVariables,
+        });
+
+        res.redirect(`/sales/contracts/${contract.id}`);
+    } catch (error) {
+        console.error('Failed to update contract:', error);
+        res.status(500).send('無法更新合約');
     }
+};
+
+const cancelContract = async (req, res) => {
+    if (req.session.user.role !== 'salesperson') {
+        return res.status(403).send('權限不足');
+    }
+
+    try {
+        const contract = await contractModel.findById(req.params.id);
+        if (!contract) {
+            return res.status(404).send('找不到合約');
+        }
+
+        if (contract.salesperson_id !== req.session.user.id) {
+            return res.status(403).send('您無權作廢此合約');
+        }
+
+        if (contract.status === 'SIGNED') {
+            req.session.flashMessage = '已簽署的合約無法作廢。';
+            return res.redirect(`/sales/contracts/${contract.id}`);
+        }
+
+        if (contract.status === 'CANCELLED') {
+            req.session.flashMessage = '此合約已作廢。';
+            return res.redirect(`/sales/contracts/${contract.id}`);
+        }
+
+        const cancelled = await contractModel.cancel(contract.id, req.session.user.id);
+        req.session.flashMessage = cancelled ? '合約已成功作廢。' : '作廢失敗，請稍後再試。';
+        res.redirect('/sales');
+    } catch (error) {
+        console.error('Failed to cancel contract:', error);
+        res.status(500).send('無法作廢合約');
+    }
+};
+
+module.exports = {
+    salesDashboard,
+    newContractPage,
+    changePasswordPage,
+    updatePassword,
+    bulkContractPage,
+    createBulkContracts,
+    createContract,
+    viewContract,
+    editContractPage,
+    updateContract,
+    cancelContract
 };

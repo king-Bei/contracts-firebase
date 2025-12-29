@@ -3,7 +3,7 @@ const fileModel = require('../models/fileModel');
 const auditLogModel = require('../models/auditLogModel');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { renderTemplateWithVariables, normalizeVariableValues } = require('../utils/templateUtils');
+const { renderTemplateWithVariables, normalizeVariableValues, renderTemplateForInteractivePreview } = require('../utils/templateUtils');
 const { streamContractPdf } = require('../services/pdfService');
 const { compressImage } = require('../utils/imageUtils');
 
@@ -52,7 +52,7 @@ const signContractPage = async (req, res) => {
             title: '合約簽署',
             signingToken: req.params.token,
             contract,
-            previewContent: null, // The view will now handle rendering
+            previewContent: renderTemplateForInteractivePreview(contract.template_content, contract.variable_values, contract.template_variables),
             isVerified,
             canSign,
             error: null,
@@ -142,13 +142,23 @@ const submitSignature = async (req, res) => {
         const customerVariables = {};
         const bodyKeys = Object.keys(req.body);
 
-        // 解析文字欄位 (e.g. "customer_variables[foo]")
+        // 如果 req.body.customer_variables 已經被解析為物件 (某些 middleware 或設定造成)，直接合併
+        if (req.body.customer_variables && typeof req.body.customer_variables === 'object') {
+            Object.assign(customerVariables, req.body.customer_variables);
+        }
+
+        console.log('DEBUG: req.body keys:', bodyKeys); // DEBUG LOG
+        console.log('DEBUG: req.body raw extracted:', req.body); // DEBUG LOG
+
+        // 解析文字欄位 (e.g. "customer_variables[foo]") - 針對標準 multer/form-data 行為
         bodyKeys.forEach(key => {
             const match = key.match(/^customer_variables\[(.+)\]$/);
             if (match) {
                 customerVariables[match[1]] = req.body[key];
             }
         });
+
+        console.log('DEBUG: Extracted customerVariables:', customerVariables); // DEBUG LOG
 
         // 處理上傳的檔案 (圖片)
         if (req.files && req.files.length > 0) {
@@ -186,17 +196,16 @@ const submitSignature = async (req, res) => {
             });
         }
 
-        const reRenderablePreview = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
-            wrapBold: true,
-            signatureImage: contract.signature_image,
-        });
-
         if (contract.status !== 'PENDING_SIGNATURE') {
+            const staticPreview = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
+                wrapBold: true,
+                signatureImage: contract.signature_image,
+            });
             return res.render('sign-contract', {
                 title: '合約簽署',
                 signingToken: req.params.token,
                 contract,
-                previewContent: reRenderablePreview,
+                previewContent: staticPreview,
                 isVerified,
                 canSign: false,
                 error: null,
@@ -204,12 +213,15 @@ const submitSignature = async (req, res) => {
             });
         }
 
+        // For interactive errors (still pending signature), use interactive preview
+        const interactivePreview = renderTemplateForInteractivePreview(contract.template_content, contract.variable_values, contract.template_variables);
+
         if (!agree_terms) {
             return res.render('sign-contract', {
                 title: '合約簽署',
                 signingToken: req.params.token,
                 contract,
-                previewContent: reRenderablePreview,
+                previewContent: interactivePreview,
                 isVerified,
                 canSign: true,
                 error: '請先同意個資保護條款。',
@@ -222,7 +234,7 @@ const submitSignature = async (req, res) => {
                 title: '合約簽署',
                 signingToken: req.params.token,
                 contract,
-                previewContent: reRenderablePreview,
+                previewContent: interactivePreview,
                 isVerified,
                 canSign: true,
                 error: '請提供簽名。',
@@ -230,7 +242,15 @@ const submitSignature = async (req, res) => {
             });
         }
 
-        const existingVariables = contract.variable_values || {};
+        let existingVariables = contract.variable_values || {};
+        if (typeof existingVariables === 'string') {
+            try {
+                existingVariables = JSON.parse(existingVariables);
+            } catch (e) {
+                console.error('Failed to parse existing variable_values:', e);
+                existingVariables = {};
+            }
+        }
         const finalVariables = { ...existingVariables, ...customerVariables };
         const normalizedFinalVariables = normalizeVariableValues(finalVariables, contract.template_variables);
 

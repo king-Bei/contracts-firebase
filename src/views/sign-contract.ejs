@@ -1,373 +1,335 @@
 <%- include('partials/header') %>
-  <% function renderContractForSigning(templateContent, templateVariables, variableValues) { let content=templateContent
-    || '' ; const valueMap=new Map(Object.entries(variableValues || {})); (templateVariables || []).forEach(variable=> {
-    const key = variable.key;
-    if (!key) return;
 
-    const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-    if (!content.match(regex)) return;
+  <div class="py-4">
+    <h1 class="h3 mb-3">合約簽署</h1>
+    <% if (statusMessage) { %>
+      <div class="alert alert-info">
+        <%= statusMessage %>
+      </div>
+      <% } %>
+        <% if (error) { %>
+          <div class="alert alert-danger">
+            <%= error %>
+          </div>
+          <% } %>
 
-    let replacement = '';
-    const currentValue = valueMap.get(key) || '';
-    const isImage = variable.type === 'image';
-
-    if (variable.isCustomerFillable) {
-    if (isImage) {
-    replacement = `<img id="preview_img_${key}" src="${currentValue || ''}" alt="預覽圖片"
-      style="max-width: 100%; max-height: 200px; display: ${currentValue ? 'inline-block' : 'none'}; border: 1px dashed #ccc;"
-      class="my-2" />`;
-    } else {
-    replacement = `<span id="preview_text_${key}" class="text-decoration-underline text-primary fw-bold">${currentValue
-      || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span>`;
-    }
-    } else {
-    let displayValue = currentValue;
-    if (isImage) {
-    if (currentValue && typeof currentValue === 'string' && currentValue.startsWith('data:image')) {
-    replacement = `<img src="${currentValue}" style="max-width: 100%; max-height: 200px;" />`;
-    } else {
-    replacement = '';
-    }
-    } else {
-    if (typeof currentValue === 'boolean') {
-    displayValue = currentValue ? '已勾選' : '未勾選';
-    } else if (Array.isArray(currentValue)) {
-    displayValue = currentValue.join(', ');
-    }
-    replacement = `<strong class="text-decoration-underline">${displayValue || '&nbsp;'}</strong>`;
-    }
-    }
-    content = content.replace(regex, replacement);
-    });
-    return content;
-    }
-    %>
-    <div class="py-4">
-      <h1 class="h3 mb-3">合約簽署</h1>
-      <% if (statusMessage) { %>
-        <div class="alert alert-info">
-          <%= statusMessage %>
-        </div>
-        <% } %>
-          <% if (error) { %>
-            <div class="alert alert-danger">
-              <%= error %>
+            <div class="card shadow-sm mb-4 anim-fade-up">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>驗證碼驗證</strong>
+                <% if (isVerified) { %>
+                  <span class="badge bg-success">已完成驗證</span>
+                  <% } else { %>
+                    <span class="badge bg-secondary">待驗證</span>
+                    <% } %>
+              </div>
+              <div class="card-body">
+                <% if (!isVerified) { %>
+                  <p class="text-muted mb-3">請先輸入驗證碼通過身份確認，通過後才會顯示完整合約內容與簽署區域。</p>
+                  <form method="POST" action="/contracts/sign/<%= signingToken %>/verify" class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label">驗證碼</label>
+                      <input type="text" name="verification_code" class="form-control" required maxlength="6"
+                        pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code">
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                      <button type="submit" class="btn btn-primary">送出驗證碼</button>
+                    </div>
+                  </form>
+                  <% } else { %>
+                    <div class="alert alert-success mb-0">此裝置已完成驗證，您可以檢視與簽署合約。</div>
+                    <% } %>
+              </div>
             </div>
-            <% } %>
 
+            <% if (isVerified) { %>
               <div class="card shadow-sm mb-4 anim-fade-up">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                  <strong>驗證碼驗證</strong>
-                  <% if (isVerified) { %>
-                    <span class="badge bg-success">已完成驗證</span>
-                    <% } else { %>
-                      <span class="badge bg-secondary">待驗證</span>
-                      <% } %>
+                <div class="card-header">
+                  <strong>
+                    <%= contract.template_name %>
+                  </strong>
                 </div>
                 <div class="card-body">
-                  <% if (!isVerified) { %>
-                    <p class="text-muted mb-3">請先輸入驗證碼通過身份確認，通過後才會顯示完整合約內容與簽署區域。</p>
-                    <form method="POST" action="/contracts/sign/<%= signingToken %>/verify" class="row g-3">
-                      <div class="col-md-6">
-                        <label class="form-label">驗證碼</label>
-                        <input type="text" name="verification_code" class="form-control" required maxlength="6"
-                          pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code">
-                      </div>
-                      <div class="col-md-6 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary">送出驗證碼</button>
-                      </div>
-                    </form>
-                    <% } else { %>
-                      <div class="alert alert-success mb-0">此裝置已完成驗證，您可以檢視與簽署合約。</div>
+                  <p class="mb-2"><strong>客戶名稱：</strong>
+                    <%= contract.client_name || '-' %>
+                  </p>
+                  <% if (contract.status==='SIGNED' ) { %>
+                    <span class="badge bg-success">已簽署</span>
+                    <% } else if (contract.status==='PENDING_SIGNATURE' ) { %>
+                      <span class="badge bg-warning text-dark">待簽署</span>
                       <% } %>
                 </div>
               </div>
 
-              <% if (isVerified) { %>
-                <div class="card shadow-sm mb-4 anim-fade-up">
-                  <div class="card-header">
-                    <strong>
-                      <%= contract.template_name %>
-                    </strong>
-                  </div>
-                  <div class="card-body">
-                    <p class="mb-2"><strong>客戶名稱：</strong>
-                      <%= contract.client_name || '-' %>
-                    </p>
-                    <% if (contract.status==='SIGNED' ) { %>
-                      <span class="badge bg-success">已簽署</span>
-                      <% } else if (contract.status==='PENDING_SIGNATURE' ) { %>
-                        <span class="badge bg-warning text-dark">待簽署</span>
-                        <% } %>
-                  </div>
-                </div>
-
-                <% if (canSign) { %>
-                  <form method="POST" action="" onsubmit="return handleSubmit();" id="signing-form"
-                    enctype="multipart/form-data">
-                    <% const customerFields=(contract.template_variables || []).filter(v=> v.isCustomerFillable);
-                      if (customerFields.length > 0) {
-                      %>
-                      <div class="card shadow-sm mb-4 anim-fade-up">
-                        <div class="card-header">
-                          <strong>請填寫您的資訊</strong>
-                        </div>
-                        <div class="card-body">
-                          <div class="row g-3">
-                            <% customerFields.forEach(variable=> { %>
-                              <div class="col-md-<%= variable.width || 6 %>">
-                                <label class="form-label" for="customer_var_<%= variable.key %>">
-                                  <%= variable.label %>
-                                    <% if (variable.isRequired) { %><span class="text-danger">*</span>
-                                      <% } %>
-                                </label>
-                                <% const nameAttr=`name="customer_variables[${variable.key}]" `; const
-                                  idAttr=`id="customer_var_${variable.key}" `; const requiredAttr=variable.isRequired
-                                  ? 'required' : '' ; const currentValue=(contract.variable_values || {})[variable.key]
-                                  || '' ; %>
-                                  <% if (variable.type==='textarea' ) { %>
-                                    <textarea <%=nameAttr
-                                      %> <%= idAttr %> class="form-control" rows="3" <%= requiredAttr %>><%= currentValue %></textarea>
-                                    <% } else if (variable.type==='checkbox' ) { %>
-                                      <div class="form-check">
-                                        <input type="checkbox" <%=nameAttr %>
-                                        <%= idAttr %> class="form-check-input" <%= currentValue ? 'checked' : '' %>
-                                            <%= requiredAttr %>>
-                                      </div>
-                                      <% } else if (variable.type==='select' ) { %>
-                                        <select <%=nameAttr %>
-                                          <%= idAttr %> class="form-select" <%= requiredAttr %>>
-                                              <option value="">請選擇</option>
-                                              <% (variable.options || []).forEach(opt=> { %>
-                                                <option value="<%= opt %>" <%=opt===currentValue ? 'selected' : '' %>>
-                                                  <%= opt %>
-                                                </option>
-                                                <% }); %>
-                                        </select>
-                                        <% } else if (variable.type==='image' ) { %>
-                                          <input type="file" <%=nameAttr %>
-                                          <%= idAttr %> class="form-control" accept="image/*" <%= requiredAttr %>
-                                              onchange="previewImage(this, '<%= variable.key %>')">
-                                                <% if (currentValue) { %>
-                                                  <div class="mt-1 small text-muted">目前已有上傳圖片</div>
-                                                  <% } %>
-                                                    <% } else { %>
-                                                      <input type="<%= variable.type || 'text' %>" <%=nameAttr %>
-                                                      <%= idAttr %> class="form-control" value="<%= currentValue %>" <%=
-                                                            requiredAttr %>>
-                                                            <% } %>
-                              </div>
-                              <% }); %>
-                          </div>
-                        </div>
+              <% if (canSign) { %>
+                <form method="POST" action="" onsubmit="return handleSubmit();" id="signing-form"
+                  enctype="multipart/form-data">
+                  <% const customerFields=(contract.template_variables || []).filter(v=> v.isCustomerFillable);
+                    if (customerFields.length > 0) {
+                    %>
+                    <div class="card shadow-sm mb-4 anim-fade-up">
+                      <div class="card-header">
+                        <strong>請填寫您的資訊</strong>
                       </div>
-                      <% } %>
-
-                        <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
-                          <div class="card-header d-flex justify-content-between align-items-center">
-                            <strong>合約內容</strong>
-                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                              id="print-preview">列印</button>
-                          </div>
-                          <div class="card-body" id="contract-preview-wrapper">
-                            <% if (contract.template_logo_url) { %>
-                              <div class="text-center mb-4">
-                                <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid"
-                                  style="max-height: 80px;">
-                              </div>
-                              <% } %>
-
-                                <div class="border rounded p-3 bg-light contract-content-render"
-                                  style="max-height: 520px; overflow: auto;">
-                                  <%- renderContractForSigning(contract.template_content, contract.template_variables,
-                                    contract.variable_values) %>
-                                </div>
-                          </div>
-                        </div>
-
-                        <div class="card shadow-sm anim-fade-up">
-                          <div class="card-header">簽署確認</div>
-                          <div class="card-body">
-                            <div class="form-check mb-3">
-                              <input class="form-check-input" type="checkbox" value="on" id="agree_terms"
-                                name="agree_terms" required>
-                              <label class="form-check-label" for="agree_terms">我已閱讀並同意<a href="/privacy"
-                                  target="_blank" rel="noopener" class="ms-1">個資保護條款</a></label>
+                      <div class="card-body">
+                        <div class="row g-3">
+                          <% customerFields.forEach(variable=> { %>
+                            <div class="col-md-<%= variable.width || 6 %>">
+                              <label class="form-label" for="customer_var_<%= variable.key %>">
+                                <%= variable.label %>
+                                  <% if (variable.isRequired) { %><span class="text-danger">*</span>
+                                    <% } %>
+                              </label>
+                              <% const nameAttr=`name="customer_variables[${variable.key}]" `; const
+                                idAttr=`id="customer_var_${variable.key}" `; const requiredAttr=variable.isRequired
+                                ? 'required' : '' ; const currentValue=(contract.variable_values || {})[variable.key]
+                                || '' ; %>
+                                <% if (variable.type==='textarea' ) { %>
+                                  <textarea <%=nameAttr
+                                    %> <%= idAttr %> class="form-control" rows="3" <%= requiredAttr %>><%= currentValue %></textarea>
+                                  <% } else if (variable.type==='checkbox' ) { %>
+                                    <div class="form-check">
+                                      <input type="checkbox" <%=nameAttr %>
+                                      <%= idAttr %> class="form-check-input" <%= currentValue ? 'checked' : '' %>
+                                          <%= requiredAttr %>>
+                                    </div>
+                                    <% } else if (variable.type==='select' ) { %>
+                                      <select <%=nameAttr %>
+                                        <%= idAttr %> class="form-select" <%= requiredAttr %>>
+                                            <option value="">請選擇</option>
+                                            <% (variable.options || []).forEach(opt=> { %>
+                                              <option value="<%= opt %>" <%=opt===currentValue ? 'selected' : '' %>>
+                                                <%= opt %>
+                                              </option>
+                                              <% }); %>
+                                      </select>
+                                      <% } else if (variable.type==='image' ) { %>
+                                        <input type="file" <%=nameAttr %>
+                                        <%= idAttr %> class="form-control" accept="image/*" <%= requiredAttr %>
+                                            onchange="previewImage(this, '<%= variable.key %>')">
+                                              <% if (currentValue) { %>
+                                                <div class="mt-1 small text-muted">目前已有上傳圖片</div>
+                                                <% } %>
+                                                  <% } else { %>
+                                                    <input type="<%= variable.type || 'text' %>" <%=nameAttr %>
+                                                    <%= idAttr %> class="form-control" value="<%= currentValue %>" <%=
+                                                          requiredAttr %>>
+                                                          <% } %>
                             </div>
-
-                            <div class="mb-3">
-                              <label class="form-label">簽名</label>
-                              <div class="border rounded" style="height: 220px;">
-                                <canvas id="signature-pad" class="w-100 h-100"></canvas>
-                              </div>
-                              <div class="mt-2 d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-secondary" type="button"
-                                  id="clear-signature">清除簽名</button>
-                              </div>
-                              <input type="hidden" name="signature_data" id="signature_data">
-                            </div>
-
-                            <button type="submit" class="btn btn-primary">送出簽署</button>
-                          </div>
+                            <% }); %>
                         </div>
-                  </form>
-                  <% } else { %>
-                    <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
-                      <div class="card-header d-flex justify-content-between align-items-center">
-                        <strong>合約內容</strong>
-                        <div class="d-flex gap-2">
-                          <% if (contract.status==='SIGNED' ) { %>
-                            <a class="btn btn-sm btn-outline-primary" href="/contracts/sign/<%= signingToken %>/pdf"
-                              target="_blank" rel="noopener">下載 PDF</a>
-                            <% } %>
-                              <button type="button" class="btn btn-sm btn-outline-secondary"
-                                id="print-preview">列印</button>
-                        </div>
-                      </div>
-                      <div class="card-body" id="contract-preview-wrapper">
-                        <% if (contract.template_logo_url) { %>
-                          <div class="text-center mb-4">
-                            <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid"
-                              style="max-height: 80px;">
-                          </div>
-                          <% } %>
-
-                            <div class="border rounded p-3 bg-light" style="max-height: 520px; overflow: auto;">
-                              <%- previewContent %>
-                            </div>
-
-                            <% if (contract.signature_image) { %>
-                              <div class="border rounded p-3 bg-white mt-3">
-                                <div class="fw-bold mb-2">簽署圖片</div>
-                                <img src="<%= contract.signature_image %>" alt="客戶簽名" class="img-fluid border rounded"
-                                  style="max-height: 220px;">
-                              </div>
-                              <% } %>
                       </div>
                     </div>
                     <% } %>
-                      <% } else { %>
-                        <div class="alert alert-light border">驗證成功後會立即顯示合約內容與簽署區域。</div>
+
+                      <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                          <strong>合約內容</strong>
+                          <button type="button" class="btn btn-sm btn-outline-secondary" id="print-preview">列印</button>
+                        </div>
+                        <div class="card-body" id="contract-preview-wrapper">
+                          <% if (contract.template_logo_url) { %>
+                            <div class="text-center mb-4">
+                              <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid"
+                                style="max-height: 80px;">
+                            </div>
+                            <% } %>
+
+                              <div class="border rounded p-3 bg-light contract-content-render"
+                                style="max-height: 520px; overflow: auto;">
+                                <%- previewContent %>
+                              </div>
+                        </div>
+                      </div>
+
+                      <div class="card shadow-sm anim-fade-up">
+                        <div class="card-header">簽署確認</div>
+                        <div class="card-body">
+                          <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" value="on" id="agree_terms"
+                              name="agree_terms" required>
+                            <label class="form-check-label" for="agree_terms">我已閱讀並同意<a href="/privacy" target="_blank"
+                                rel="noopener" class="ms-1">個資保護條款</a></label>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">簽名</label>
+                            <div class="border rounded" style="height: 220px;">
+                              <canvas id="signature-pad" class="w-100 h-100"></canvas>
+                            </div>
+                            <div class="mt-2 d-flex gap-2">
+                              <button class="btn btn-sm btn-outline-secondary" type="button"
+                                id="clear-signature">清除簽名</button>
+                            </div>
+                            <input type="hidden" name="signature_data" id="signature_data">
+                          </div>
+
+                          <button type="submit" class="btn btn-primary">送出簽署</button>
+                        </div>
+                      </div>
+                </form>
+                <% } else { %>
+                  <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                      <strong>合約內容</strong>
+                      <div class="d-flex gap-2">
+                        <% if (contract.status==='SIGNED' ) { %>
+                          <a class="btn btn-sm btn-outline-primary" href="/contracts/sign/<%= signingToken %>/pdf"
+                            target="_blank" rel="noopener">下載 PDF</a>
+                          <% } %>
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                              id="print-preview">列印</button>
+                      </div>
+                    </div>
+                    <div class="card-body" id="contract-preview-wrapper">
+                      <% if (contract.template_logo_url) { %>
+                        <div class="text-center mb-4">
+                          <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid"
+                            style="max-height: 80px;">
+                        </div>
                         <% } %>
-    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
-    <script>
-      const canvas = document.getElementById('signature-pad');
-      const clearBtn = document.getElementById('clear-signature');
-      const hiddenInput = document.getElementById('signature_data');
-      let signaturePad = null;
+                          <div class="border rounded p-3 bg-light" style="max-height: 520px; overflow: auto;">
+                            <%- previewContent %>
+                          </div>
 
-      if (canvas) {
-        signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
+                          <% if (contract.signature_image) { %>
+                            <div class="border rounded p-3 bg-white mt-3">
+                              <div class="fw-bold mb-2">簽署圖片</div>
+                              <img src="<%= contract.signature_image %>" alt="客戶簽名" class="img-fluid border rounded"
+                                style="max-height: 220px;">
+                            </div>
+                            <% } %>
+                    </div>
+                  </div>
+                  <% } %>
+                    <% } else { %>
+                      <div class="alert alert-light border">驗證成功後會立即顯示合約內容與簽署區域。</div>
+                      <% } %>
+  </div>
 
-        const resizeCanvas = () => {
-          const ratio = Math.max(window.devicePixelRatio || 1, 1);
-          canvas.width = canvas.offsetWidth * ratio;
-          canvas.height = canvas.offsetHeight * ratio;
-          canvas.getContext('2d').scale(ratio, ratio);
-          signaturePad.clear();
-        };
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
+  <script>
+    const canvas = document.getElementById('signature-pad');
+    const clearBtn = document.getElementById('clear-signature');
+    const hiddenInput = document.getElementById('signature_data');
+    let signaturePad = null;
 
-        clearBtn.addEventListener('click', () => signaturePad.clear());
+    if (canvas) {
+      signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
+
+      const resizeCanvas = () => {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        canvas.width = canvas.offsetWidth * ratio;
+        canvas.height = canvas.offsetHeight * ratio;
+        canvas.getContext('2d').scale(ratio, ratio);
+        signaturePad.clear();
+      };
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      clearBtn.addEventListener('click', () => signaturePad.clear());
+    }
+
+    function handleSubmit() {
+      if (!signaturePad) {
+        console.error('SignaturePad not initialized');
+        alert('簽名板未正確載入，請確認網路連線正常並重新整理頁面。');
+        return false;
       }
-
-      function handleSubmit() {
-        if (!signaturePad) return false;
-        if (signaturePad.isEmpty()) {
-          alert('請先簽名再送出。');
-          return false;
-        }
-        hiddenInput.value = signaturePad.toDataURL();
-        return true;
+      if (signaturePad.isEmpty()) {
+        alert('請先簽名再送出。');
+        return false;
       }
+      hiddenInput.value = signaturePad.toDataURL();
+      return true;
+    }
 
-      const printBtn = document.getElementById('print-contract');
-      const printPreviewBtn = document.getElementById('print-preview');
-      if (printBtn) {
-        printBtn.addEventListener('click', () => window.print());
-      }
+    const printBtn = document.getElementById('print-contract');
+    const printPreviewBtn = document.getElementById('print-preview');
+    if (printBtn) {
+      printBtn.addEventListener('click', () => window.print());
+    }
+    if (printPreviewBtn) {
       printPreviewBtn.addEventListener('click', () => window.print());
-}
+    }
 
-      function previewImage(input, key) {
-        if (input.files && input.files[0]) {
-          const reader = new FileReader();
-          reader.onload = function (e) {
-            const img = document.getElementById(`preview_img_${key}`);
-            if (img) {
-              img.src = e.target.result;
-              img.style.display = 'inline-block';
-            }
+
+    function previewImage(input, key) {
+      if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const img = document.getElementById(`preview_img_${key}`);
+          if (img) {
+            img.src = e.target.result;
+            img.style.display = 'inline-block';
           }
-          reader.readAsDataURL(input.files[0]);
         }
+        reader.readAsDataURL(input.files[0]);
       }
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script>
-      function prepareClone(element) {
-        const clone = element.cloneNode(true);
-        clone.style.maxHeight = 'none';
-        clone.style.overflow = 'visible';
-        clone.style.position = 'absolute';
-        clone.style.left = '-9999px';
-        clone.style.top = '0';
-        clone.style.width = `${element.scrollWidth || element.offsetWidth}px`;
-        clone.style.height = `${element.scrollHeight || element.offsetHeight}px`;
-        const scrollable = clone.querySelector('.border');
-        if (scrollable) {
-          scrollable.style.maxHeight = 'none';
-          scrollable.style.overflow = 'visible';
-          scrollable.style.height = 'auto';
-          scrollable.style.width = `${scrollable.scrollWidth || scrollable.offsetWidth}px`;
-        }
-        document.body.appendChild(clone);
-        return clone;
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script>
+    function prepareClone(element) {
+      const clone = element.cloneNode(true);
+      clone.style.maxHeight = 'none';
+      clone.style.overflow = 'visible';
+      clone.style.position = 'absolute';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      clone.style.width = `${element.scrollWidth || element.offsetWidth}px`;
+      clone.style.height = `${element.scrollHeight || element.offsetHeight}px`;
+      const scrollable = clone.querySelector('.border');
+      if (scrollable) {
+        scrollable.style.maxHeight = 'none';
+        scrollable.style.overflow = 'visible';
+        scrollable.style.height = 'auto';
+        scrollable.style.width = `${scrollable.scrollWidth || scrollable.offsetWidth}px`;
       }
+      document.body.appendChild(clone);
+      return clone;
+    }
 
-      async function downloadPdf(elementId, filename) {
-        const wrapper = document.getElementById(elementId);
-        if (!wrapper) return;
-        const scrollable = wrapper.querySelector('.border') || wrapper;
-        const clone = prepareClone(scrollable);
-        const canvas = await html2canvas(clone, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          scrollY: -window.scrollY,
-        });
-        clone.remove();
-        const imgData = canvas.toDataURL('image/png');
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'pt', 'a4');
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const imgProps = pdf.getImageProperties(imgData);
-        const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
-        const imgWidth = imgProps.width * ratio;
-        const imgHeight = imgProps.height * ratio;
+    async function downloadPdf(elementId, filename) {
+      const wrapper = document.getElementById(elementId);
+      if (!wrapper) return;
+      const scrollable = wrapper.querySelector('.border') || wrapper;
+      const clone = prepareClone(scrollable);
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        scrollY: -window.scrollY,
+      });
+      clone.remove();
+      const imgData = canvas.toDataURL('image/png');
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'pt', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = pdf.getImageProperties(imgData);
+      const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
+      const imgWidth = imgProps.width * ratio;
+      const imgHeight = imgProps.height * ratio;
 
-        let heightLeft = imgHeight;
-        let position = 0;
+      let heightLeft = imgHeight;
+      let position = 0;
 
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
-
-        while (heightLeft > 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-        }
-
-        pdf.save(filename);
       }
 
-      const pdfButtons = document.querySelectorAll('#download-pdf, #download-pdf-top');
-      pdfButtons.forEach(btn => btn?.addEventListener('click', () => downloadPdf('contract-preview-card', `contract-${'<%= contract.id %>'}.pdf`)));
-    </script>
-    <%- include('partials/footer') %>
+      pdf.save(filename);
+    }
+
+    const pdfButtons = document.querySelectorAll('#download-pdf, #download-pdf-top');
+    pdfButtons.forEach(btn => btn?.addEventListener('click', () => downloadPdf('contract-preview-card', `contract-${'<%= contract.id %>'}.pdf`)));
+  </script>
+  <%- include('partials/footer') %>

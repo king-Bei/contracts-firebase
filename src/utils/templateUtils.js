@@ -138,7 +138,64 @@ const normalizeVariableValues = (rawValues, templateVariables = []) => {
     return output;
 };
 
+const renderTemplateForInteractivePreview = (content, variableValues, templateVariables) => {
+    let filled = content || '';
+    const values = (variableValues || {});
+    // valueMap helps lookup values by key
+    const valueMap = new Map(Object.entries(values));
+    const variables = Array.isArray(templateVariables) ? templateVariables : [];
+
+    variables.forEach(variable => {
+        const key = variable.key;
+        if (!key) return;
+
+        // Use global regex to replace all occurrences
+        const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+        if (!filled.match(regex)) return;
+
+        let replacement = '';
+        const currentValue = valueMap.get(key);
+        // Handle undefined/null gracefully
+        const valStr = (currentValue === undefined || currentValue === null) ? '' : currentValue;
+
+        if (variable.isCustomerFillable) {
+            // Logic for customer-fillable fields (interactive preview)
+            if (variable.type === 'image') {
+                replacement = `<img id="preview_img_${key}" src="${valStr}" alt="預覽圖片" style="max-width: 100%; max-height: 200px; display: ${valStr ? 'inline-block' : 'none'}; border: 1px dashed #ccc;" class="my-2" />`;
+            } else {
+                // Determine placeholder if empty
+                const display = valStr || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
+                replacement = `<span id="preview_text_${key}" class="text-decoration-underline text-primary fw-bold">${display}</span>`;
+            }
+        } else {
+            // Logic for pre-filled fields (read-only for customer)
+            if (variable.type === 'image') {
+                if (valStr && typeof valStr === 'string' && valStr.startsWith('data:image')) {
+                    replacement = `<img src="${valStr}" style="max-width: 100%; max-height: 200px;" />`;
+                } else {
+                    replacement = ''; // Hide broken/empty images
+                }
+            } else {
+                let displayValue = valStr;
+                // Handle booleans/checkboxes
+                if (variable.type === 'checkbox' || typeof currentValue === 'boolean') {
+                    const isChecked = [true, 'true', 'on', 1, '1', 'yes', '已勾選'].includes(currentValue);
+                    displayValue = isChecked ? '已勾選' : '未勾選';
+                } else if (Array.isArray(currentValue)) {
+                    displayValue = currentValue.join(', ');
+                }
+
+                replacement = `<strong class="text-decoration-underline">${displayValue || '&nbsp;'}</strong>`;
+            }
+        }
+        filled = filled.replace(regex, replacement);
+    });
+
+    return filled;
+};
+
 module.exports = {
     renderTemplateWithVariables,
     normalizeVariableValues,
+    renderTemplateForInteractivePreview,
 };

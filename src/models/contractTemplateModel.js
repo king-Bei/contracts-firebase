@@ -55,7 +55,7 @@ async function create({ name, content, variables, logo_url }) {
  * @returns {Array<object>} - 範本物件陣列。
  */
 async function findAllActive() {
-  const queryText = 'SELECT id, name, is_active FROM contract_templates WHERE is_active = TRUE ORDER BY id ASC';
+  const queryText = 'SELECT id, name, is_active, variables FROM contract_templates WHERE is_active = TRUE ORDER BY id ASC';
   const { rows } = await db.query(queryText);
   return rows;
 }

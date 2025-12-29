@@ -1,157 +1,195 @@
 <%- include('partials/header') %>
 
-<h1><%= title %></h1>
+  <h1>
+    <%= title %>
+  </h1>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <form action="/sales/contracts" method="POST">
-      <div class="mb-3">
-        <label for="client_name" class="form-label">客戶名稱</label>
-        <input type="text" class="form-control" id="client_name" name="client_name" required>
-      </div>
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <!-- Changed to multipart for potential file uploads if templates have file inputs in future, 
+         though currently text-based. Keeping simple unless image type added. -->
+      <form action="/sales/contracts" method="POST">
+        <div class="mb-3">
+          <label for="client_name" class="form-label">客戶名稱</label>
+          <input type="text" class="form-control" id="client_name" name="client_name" required>
+        </div>
 
-      <div class="mb-3">
-        <label for="template_id" class="form-label">選擇合約範本</label>
-        <select class="form-select" id="template_id" name="template_id" required>
-          <option value="" disabled selected>-- 請選擇一個範本 --</option>
-          <% templates.forEach(template => { %>
-            <option value="<%= template.id %>"><%= template.name %></option>
-          <% }) %>
-        </select>
-      </div>
-      
-      <hr>
+        <div class="mb-3">
+          <label for="template_id" class="form-label">選擇合約範本</label>
+          <select class="form-select" id="template_id" name="template_id" required>
+            <option value="" disabled selected>-- 請選擇一個範本 --</option>
+            <% templates.forEach(template=> { %>
+              <option value="<%= template.id %>">
+                <%= template.name %>
+              </option>
+              <% }) %>
+          </select>
+        </div>
 
-      <div id="variable-fields" class="mt-3">
-        <!-- Dynamic fields will be inserted here by JavaScript -->
-      </div>
+        <hr>
 
-      <button type="submit" class="btn btn-primary mt-4">建立合約草稿</button>
-      <a href="/sales" class="btn btn-secondary mt-4">取消</a>
-    </form>
+        <div id="variable-fields" class="mt-3">
+          <!-- Dynamic fields will be inserted here by JavaScript -->
+        </div>
+
+        <button type="submit" class="btn btn-primary mt-4">建立合約草稿</button>
+        <a href="/sales" class="btn btn-secondary mt-4">取消</a>
+      </form>
+    </div>
   </div>
-</div>
 
-<script>
-  const templateSelect = document.getElementById('template_id');
-  const variableFieldsContainer = document.getElementById('variable-fields');
-  const user = <%- JSON.stringify(user || null) %>;
+  <!-- Data Islands -->
+  <script id="server-current-user" type="application/json">
+    <%- JSON.stringify({ name: user.name, email: user.email, phone: user.phone || '' }) %>
+  </script>
 
-  const prefillSalesData = () => {
-    if (!user) return;
+  <script>
+    const templateSelect = document.getElementById('template_id');
+    const variableFieldsContainer = document.getElementById('variable-fields');
 
-    const fieldsToPrefill = {
-      'sales_name': user.name,
-      'sales_email': user.email,
-      'sales_phone': user.phone,
-    };
-
-    for (const key in fieldsToPrefill) {
-      const input = document.getElementById(`var-${key}`);
-      if (input && !input.value) {
-        input.value = fieldsToPrefill[key];
-      }
-    }
-  };
-
-  templateSelect.addEventListener('change', async (e) => {
-    const templateId = e.target.value;
-    variableFieldsContainer.innerHTML = '<p>載入欄位中...</p>';
-
-    if (!templateId) {
-      variableFieldsContainer.innerHTML = '';
-      return;
-    }
-
+    // Pass user data safely to client-side
+    let currentUser = null;
     try {
-      // We need an API endpoint to get template details
-      const response = await fetch(`/api/templates/${templateId}`);
-      if (!response.ok) {
-        throw new Error('無法取得範本資料');
-      }
-      const template = await response.json();
-      
-      variableFieldsContainer.innerHTML = ''; // Clear loading message
+      currentUser = JSON.parse(document.getElementById('server-current-user').textContent);
+    } catch (e) { console.error('Error parsing user data', e); }
 
-      let variables = [];
-      if (Array.isArray(template.variables)) {
-        variables = template.variables;
-      } else if (typeof template.variables === 'string') {
-        try {
-          variables = JSON.parse(template.variables);
-        } catch (err) {
-          variables = [];
+    const prefillSalesData = () => {
+      console.log('DEBUG: prefillSalesData running. currentUser:', currentUser);
+      if (!currentUser) return;
+
+      // Define mapping: variable key -> user property
+      // You can extend this mapping as needed
+      const fieldsToPrefill = {
+        'salesName': currentUser.name,
+        'sales_name': currentUser.name,
+        'salesEmail': currentUser.email,
+        'salesPhone': currentUser.phone,
+        'agent': currentUser.name, // Common variation
+      };
+
+      // Try to find inputs by name or id and set value if empty
+      for (const [key, value] of Object.entries(fieldsToPrefill)) {
+        // Try precise match first
+        let input = document.querySelector(`[name="variables[${key}]"]`);
+        if (input && !input.value) {
+          input.value = value;
         }
       }
+    };
 
-      if (!variables.length) {
+    // Event listener removed (was duplicate)
+  </script>
+
+  <script id="server-templates-data" type="application/json">
+      <%- JSON.stringify(templates.map(t => {
+        let vars = [];
+        try {
+            vars = (typeof t.variables === 'string') ? JSON.parse(t.variables || '[]') : (t.variables || []);
+        } catch(e) { vars = []; }
+        return {
+            id: t.id,
+            variables: vars
+        };
+    })) %>
+  </script>
+
+  <script>
+    // re-select elements inside this script scope if needed, or rely on global scope from previous script block 
+    // (Note: better to merge or just read data here since it is same file execution context)
+
+    // Re-approach: Render all template data into a global JS object to avoid extra round-trip
+    let templatesData = [];
+    try {
+      templatesData = JSON.parse(document.getElementById('server-templates-data').textContent);
+    } catch (e) { console.error('Error parsing templates data', e); }
+
+    templateSelect.addEventListener('change', (e) => {
+      const templateId = e.target.value;
+      const template = templatesData.find(t => String(t.id) === String(templateId));
+      console.log('DEBUG: Template selected:', templateId, 'Found:', template);
+      if (template) console.log('DEBUG: Template variables:', template.variables);
+
+      variableFieldsContainer.innerHTML = '';
+
+      if (!template || !template.variables || !template.variables.length) {
         variableFieldsContainer.innerHTML = '<p class="text-muted">此範本沒有可填寫的變數欄位。</p>';
         return;
       }
 
-      variables.forEach(variable => {
-          const key = variable.key || variable.name;
-          const labelText = variable.label || variable.name || '變數';
-          const type = (variable.type || 'text').toLowerCase();
-          const fieldGroup = document.createElement('div');
-          fieldGroup.className = 'mb-3';
+      template.variables.forEach(variable => {
+        const key = variable.key || variable.name;
+        // Handle File/Image types logic
+        // If customer uploads images (e.g. ID card), maybe salesperson shouldn't fill it?
+        // Request said "Mark image location". Usually this is done by {{ key }} in template,
+        // and here we provide input.
 
-          const label = document.createElement('label');
-          label.className = 'form-label';
-          label.setAttribute('for', `var-${key}`);
-          label.textContent = labelText;
+        if (variable.type === 'file' || variable.type === 'image') {
+          // Usually images are uploaded by CLIENT during signing.
+          // If sales needs to upload, we need multipart/form-data.
+          // For now, let's assume sales just sets text placeholders or leaves empty for client.
+          // We'll show a message or a text input for URL?
+          // Let's create a placeholder note.
+          const note = document.createElement('div');
+          note.className = 'alert alert-info py-2';
+          note.textContent = `此欄位 (${variable.label || key}) 為圖片/檔案，將由客戶在簽署時上傳。`;
+          variableFieldsContainer.appendChild(note);
+          return;
+        }
 
-          let input;
-          if (type === 'textarea') {
-            input = document.createElement('textarea');
-            input.rows = 3;
-          } else if (type === 'checkbox') {
-            input = document.createElement('input');
-            input.type = 'checkbox';
-            input.className = 'form-check-input';
-            label.className = 'form-check-label';
-            fieldGroup.className = 'mb-3 form-check';
-          } else if (type === 'select') {
-            input = document.createElement('select');
-            input.className = 'form-select';
-            const opts = Array.isArray(variable.options) ? variable.options : [];
-            const placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.textContent = '-- 請選擇 --';
-            placeholder.selected = true;
-            placeholder.disabled = true;
-            input.appendChild(placeholder);
-            opts.forEach(opt => {
-              const optionEl = document.createElement('option');
-              optionEl.value = opt;
-              optionEl.textContent = opt;
-              input.appendChild(optionEl);
-            });
-          } else {
-            input = document.createElement('input');
-            input.type = ['number', 'date'].includes(type) ? type : 'text';
-          }
+        const labelText = variable.label || variable.name || '變數';
+        const type = (variable.type || 'text').toLowerCase();
+        const fieldGroup = document.createElement('div');
+        fieldGroup.className = 'mb-3';
 
-          input.className = input.className || 'form-control';
-          input.id = `var-${key}`;
-          input.name = `variables[${key}]`;
-          label.setAttribute('for', `var-${key}`);
+        const label = document.createElement('label');
+        label.className = 'form-label';
+        label.setAttribute('for', `var-${key}`);
+        label.textContent = labelText;
 
-          if (type === 'checkbox') {
-            fieldGroup.appendChild(input);
-            fieldGroup.appendChild(label);
-          } else {
-            fieldGroup.appendChild(label);
-            fieldGroup.appendChild(input);
-          }
-          variableFieldsContainer.appendChild(fieldGroup);
-        });
+        let input;
+        if (type === 'textarea') {
+          input = document.createElement('textarea');
+          input.rows = 3;
+        } else if (type === 'checkbox') {
+          input = document.createElement('input');
+          input.type = 'checkbox';
+          input.className = 'form-check-input';
+          label.className = 'form-check-label';
+          fieldGroup.className = 'mb-3 form-check';
+        } else if (type === 'select') {
+          input = document.createElement('select');
+          input.className = 'form-select';
+          const opts = Array.isArray(variable.options) ? variable.options : [];
+          input.innerHTML = '<option value="">-- 請選擇 --</option>';
+          opts.forEach(opt => {
+            const optEl = document.createElement('option');
+            optEl.value = opt;
+            optEl.textContent = opt;
+            input.appendChild(optEl);
+          });
+        } else {
+          input = document.createElement('input');
+          input.type = ['number', 'date', 'email', 'tel'].includes(type) ? type : 'text';
+        }
 
+        input.className = input.className || 'form-control';
+        input.id = `var-${key}`;
+        input.name = `variables[${key}]`; // Nested object for body parser
+        label.setAttribute('for', `var-${key}`);
+
+        if (type === 'checkbox') {
+          fieldGroup.appendChild(input);
+          fieldGroup.appendChild(label);
+        } else {
+          fieldGroup.appendChild(label);
+          fieldGroup.appendChild(input);
+        }
+        variableFieldsContainer.appendChild(fieldGroup);
+      });
+
+      // Auto-fill sales data
       prefillSalesData();
-    } catch (error) {
-      variableFieldsContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
-    }
-  });
-</script>
+    });
+  </script>
 
-<%- include('partials/footer') %>
+  <%- include('partials/footer') %>

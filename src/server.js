@@ -11,6 +11,12 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
+// Database Initialization Models (Moved to top)
+const userModel = require('./models/userModel');
+const contractTemplateModel = require('./models/contractTemplateModel');
+const contractModel = require('./models/contractModel');
+const fileModel = require('./models/fileModel');
+
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
@@ -89,7 +95,6 @@ app.use(session({
 // --- 路由掛載 ---
 
 // Redirect /s/:code to full signing URL
-const contractModel = require('./models/contractModel');
 app.get('/s/:code', async (req, res) => {
   try {
     const code = req.params.code;
@@ -147,10 +152,6 @@ app.use((err, req, res, next) => {
 });
 
 // --- Database Initialization ---
-const userModel = require('./models/userModel');
-const contractTemplateModel = require('./models/contractTemplateModel');
-const contractModel = require('./models/contractModel');
-const fileModel = require('./models/fileModel');
 
 async function initDb() {
   try {
@@ -162,8 +163,6 @@ async function initDb() {
     console.log('Database initialization completed.');
   } catch (err) {
     console.error('Database initialization failed:', err);
-    // Don't crash the server, but log heavily. 
-    // In strict environments, process.exit(1) might be better.
   }
 }
 

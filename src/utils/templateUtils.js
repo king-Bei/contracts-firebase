@@ -1,3 +1,31 @@
+function numberToChineseCurrency(n) {
+    if (n === null || n === undefined || n === '') return '';
+    const num = parseFloat(n);
+    if (isNaN(num)) return '';
+
+    const fraction = ['角', '分'];
+    const digit = ['零', '壹', '貳', '參', '肆', '伍', '陸', '柒', '捌', '玖'];
+    const unit = [['元', '萬', '億'], ['', '拾', '佰', '仟']];
+    const head = n < 0 ? '負' : '';
+    let s = '';
+
+    for (let i = 0; i < fraction.length; i++) {
+        s += (digit[Math.floor(Math.abs(num) * 10 * Math.pow(10, i)) % 10] + fraction[i]).replace(/零./, '');
+    }
+    s = s || '整';
+    let integerPart = Math.floor(Math.abs(num));
+
+    for (let i = 0; i < unit[0].length && integerPart > 0; i++) {
+        let p = '';
+        for (let j = 0; j < unit[1].length && integerPart > 0; j++) {
+            p = digit[integerPart % 10] + unit[1][j] + p;
+            integerPart = Math.floor(integerPart / 10);
+        }
+        s = p.replace(/(零.)*零$/, '').replace(/^$/, '零') + unit[0][i] + s;
+    }
+    return head + s.replace(/(零.)*零元/, '元').replace(/(零.)+/g, '零').replace(/^整$/, '零元整');
+}
+
 const renderTemplateWithVariables = (content, variableValues, templateVariables, options = {}) => {
     const { wrapBold = false, signatureImage = null, signaturePlaceholder = '簽署欄位' } = options;
     let filled = content || '';
@@ -13,12 +41,11 @@ const renderTemplateWithVariables = (content, variableValues, templateVariables,
     const iterable = definitions.length > 0 ? definitions : Array.from(valueMap.keys()).map(key => ({ key }));
 
     iterable.forEach(item => {
-        const key = item.key;
+        const key = item.key || item.name;
         if (!key) return;
 
+        // 1. Standard replacement
         const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-        if (!filled.match(regex)) return;
-
         const value = valueMap.get(key);
         let displayValue;
 
@@ -40,11 +67,28 @@ const renderTemplateWithVariables = (content, variableValues, templateVariables,
             displayValue = String(value);
         }
 
-        if (wrapBold && displayValue && typeof displayValue === 'string' && !displayValue.trim().startsWith('<')) {
-            displayValue = `<strong>${displayValue}</strong>`;
+        if (filled.match(regex)) {
+            let finalDisplay = displayValue;
+            if (wrapBold && finalDisplay && typeof finalDisplay === 'string' && !finalDisplay.trim().startsWith('<')) {
+                finalDisplay = `<strong>${finalDisplay}</strong>`;
+            }
+            filled = filled.replace(regex, finalDisplay);
         }
 
-        filled = filled.replace(regex, displayValue);
+        // 2. Automatic modifiers (e.g. {{ price_upper }})
+        // Only if value is somewhat numeric
+        if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)))) {
+            const upperKey = `${key}_upper`;
+            const upperRegex = new RegExp(`{{\\s*${upperKey}\\s*}}`, 'g');
+            if (filled.match(upperRegex)) {
+                const upperValue = numberToChineseCurrency(value);
+                let finalUpper = upperValue;
+                if (wrapBold && finalUpper) {
+                    finalUpper = `<strong>${finalUpper}</strong>`;
+                }
+                filled = filled.replace(upperRegex, finalUpper);
+            }
+        }
     });
 
     // Handle signature
@@ -76,6 +120,9 @@ const normalizeVariableValues = (rawValues, templateVariables = []) => {
             const normalized = Array.isArray(incomingValue) ? incomingValue : [incomingValue];
             const checked = normalized.some(v => v === true || v === 'true' || v === 'on' || v === 1 || v === '1' || v === 'yes' || v === '已勾選');
             output[key] = Boolean(checked);
+        } else if (type === 'image') {
+            // For images, we expect data URL (string) if uploaded
+            output[key] = typeof incomingValue === 'string' ? incomingValue : '';
         } else {
             output[key] = typeof incomingValue === 'string' ? incomingValue.trim() : (incomingValue ?? '');
         }

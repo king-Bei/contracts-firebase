@@ -93,9 +93,25 @@
                     </div>
 
                     <div class="mb-3">
-                        <h5 class="mt-4">範本變數</h5>
+                        <h5 class="mt-4">範本變數設定</h5>
+                        <div class="alert alert-info py-2 small">
+                            <strong>變數說明：</strong>
+                            <ul>
+                                <li><strong>一般變數：</strong> 輸入型態選擇「單行文字」或「數字」等，用於填寫金額、姓名。</li>
+                                <li><strong>金額轉大寫：</strong> 若變數為 <code>price</code>，在內容中使用 <code>{{price_upper}}</code>
+                                    可自動轉為中文大寫金額。</li>
+                                <li><strong>圖片欄位：</strong> 若需要在合約位置顯示圖片（如證件照），請將變數型態設為
+                                    <strong>「圖片」</strong>。該位置在內容中會顯示為圖片。
+                                </li>
+                                <li><strong>目前圖片與檔案：</strong> 圖片變數在業務員端僅為佔位，實際檔案由客戶在簽署時上傳。</li>
+                            </ul>
+                            <strong>簽署欄位說明：</strong>
+                            <p class="mb-0">
+                                若要指定簽名顯示位置，請在內容中插入 <code>{{簽署欄位}}</code> 變數。若未插入，系統將預設添加於合約最末端。
+                            </p>
+                        </div>
                         <p class="form-text">
-                            變數名稱建議使用英數與底線 (例：client_name)，顯示標籤則為給使用者看的中文說明，可依需求選擇輸入型態（單行、多行或勾選）。
+                            請定義下方變數列表，這些變數將對應到合約內容中的 `{{變數名稱}}`。
                         </p>
                         <div id="variables-container">
                             <!-- Variables are now loaded via script -->
@@ -124,9 +140,24 @@
         </div>
     </div>
 
+    <!-- Data Island for server-side variables -->
+    <script id="server-data-variables" type="application/json">
+        <%- JSON.stringify(variables || []) %>
+    </script>
+
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const initialVariables = <% - JSON.stringify(variables || []) %>;
+            console.log('DEBUG: DOMContentLoaded fired');
+            let initialVariables = [];
+            try {
+                // safer method: read from data script
+                const rawData = document.getElementById('server-data-variables').textContent;
+                initialVariables = JSON.parse(rawData);
+                console.log('DEBUG: Loaded initialVariables from data island:', initialVariables);
+            } catch (e) {
+                console.error("Init vars error", e);
+                initialVariables = [];
+            }
             const variablesContainer = document.getElementById('variables-container');
             const addVariableButton = document.getElementById('add-variable');
             const variablesJsonInput = document.getElementById('variables-json');
@@ -147,6 +178,7 @@
             let isHtmlMode = false;
 
             function setEditorContent(html) {
+                console.log('DEBUG: Setting editor content length:', html ? html.length : 0);
                 const value = html || '';
                 contentEditor.innerHTML = value;
                 htmlSource.value = value;

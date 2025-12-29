@@ -28,7 +28,7 @@
 
         <hr>
 
-        <div id="variable-fields" class="mt-3">
+        <div id="variable-fields" class="row mt-3">
           <!-- Dynamic fields will be inserted here by JavaScript -->
         </div>
 
@@ -138,8 +138,9 @@
 
         const labelText = variable.label || variable.name || '變數';
         const type = (variable.type || 'text').toLowerCase();
+        const widthClass = variable.width ? `col-md-${variable.width}` : 'col-12';
         const fieldGroup = document.createElement('div');
-        fieldGroup.className = 'mb-3';
+        fieldGroup.className = `mb-3 ${widthClass}`;
 
         const label = document.createElement('label');
         label.className = 'form-label';
@@ -155,7 +156,8 @@
           input.type = 'checkbox';
           input.className = 'form-check-input';
           label.className = 'form-check-label';
-          fieldGroup.className = 'mb-3 form-check';
+          fieldGroup.className = `mb-3 form-check ${widthClass} px-3`;
+          input.style.marginLeft = '0.5rem';
         } else if (type === 'select') {
           input = document.createElement('select');
           input.className = 'form-select';

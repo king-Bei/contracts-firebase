@@ -129,6 +129,12 @@
                         <label class="form-check-label" for="is_active">啟用此範本</label>
                     </div>
 
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="on" id="requires_approval"
+                            name="requires_approval" <%=template.requires_approval !==false ? 'checked' : '' %>>
+                        <label class="form-check-label" for="requires_approval">使用此範本建立的合約需經主管審核</label>
+                    </div>
+
                     <input type="hidden" name="variables" id="variables-json">
 
                     <div class="d-flex justify-content-end">
@@ -233,7 +239,7 @@
                 htmlSource.value = contentEditor.innerHTML;
             }
 
-            function addVariableRow(key = '', label = '', type = 'text', options = '', isCustomerFillable = false, isRequired = false) {
+            function addVariableRow(key = '', label = '', type = 'text', options = '', isCustomerFillable = false, isRequired = false, width = '12') {
                 variableCount++;
                 const row = document.createElement('div');
                 row.classList.add('row', 'mb-3', 'g-2', 'align-items-center', 'variable-row', 'p-2', 'border', 'rounded');
@@ -245,6 +251,14 @@
             <div class="col-md-2">
                 <label class="form-label small">顯示標籤</label>
                 <input type="text" class="form-control" placeholder="客戶姓名" name="var_label_${variableCount}" value="${label}" required>
+            </div>
+             <div class="col-md-2">
+                <label class="form-label small">寬度</label>
+                <select class="form-select" name="var_width_${variableCount}">
+                    <option value="12" ${width === '12' ? 'selected' : ''}>全寬 (100%)</option>
+                    <option value="6" ${width === '6' ? 'selected' : ''}>半寬 (50%)</option>
+                    <option value="4" ${width === '4' ? 'selected' : ''}>三分之一 (33%)</option>
+                </select>
             </div>
             <div class="col-md-2">
                 <label class="form-label small">輸入型態</label>
@@ -258,19 +272,19 @@
                     <option value="image" ${type === 'image' ? 'selected' : ''}>圖片</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small">下拉選項 <span class="text-muted">(用逗號分)</span></label>
                 <input type="text" class="form-control" placeholder="選項A,選項B" name="var_options_${variableCount}" value="${options || ''}" ${type !== 'select' ? 'disabled' : ''}>
             </div>
-            <div class="col-md-3 d-flex align-items-end">
-                <div class="d-flex gap-3 w-100 justify-content-end align-items-center">
-                    <div class="form-check form-switch">
+            <div class="col-md-2 d-flex align-items-end">
+                <div class="d-flex gap-2 w-100 justify-content-end align-items-center">
+                    <div class="form-check form-switch" title="客戶填寫">
                         <input class="form-check-input" type="checkbox" name="var_customer_fill_${variableCount}" ${isCustomerFillable ? 'checked' : ''}>
-                        <label class="form-check-label small">客戶填寫</label>
+                         <label class="form-check-label small d-none d-lg-inline">客</label>
                     </div>
-                    <div class="form-check form-switch">
+                    <div class="form-check form-switch" title="客戶必填">
                         <input class="form-check-input" type="checkbox" name="var_is_required_${variableCount}" ${isRequired ? 'checked' : ''} ${!isCustomerFillable ? 'disabled' : ''}>
-                        <label class="form-check-label small">客戶必填</label>
+                         <label class="form-check-label small d-none d-lg-inline">必</label>
                     </div>
                     <div class="btn-group">
                         <button type="button" class="btn btn-outline-secondary btn-sm move-up" title="上移">↑</button>
@@ -302,7 +316,7 @@
             }
 
             initialVariables.forEach(v => {
-                addVariableRow(v.key, v.label, v.type, (v.options || []).join(','), v.isCustomerFillable, v.isRequired);
+                addVariableRow(v.key, v.label, v.type, (v.options || []).join(','), v.isCustomerFillable, v.isRequired, v.width);
             });
 
             addVariableButton.addEventListener('click', () => addVariableRow());
@@ -502,7 +516,10 @@
                         break;
                     }
 
-                    variables.push({ key, label, type: normalizedType, options, isCustomerFillable, isRequired });
+                    const widthInput = row.querySelector('select[name^="var_width_"]');
+                    const width = widthInput ? widthInput.value : '12';
+
+                    variables.push({ key, label, type: normalizedType, options, isCustomerFillable, isRequired, width });
                 }
 
                 if (!isValid) {

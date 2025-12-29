@@ -1,0 +1,117 @@
+<%- include('../partials/header') %>
+
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>主管審核儀表板</h1>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <form action="/manager/dashboard" method="GET" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">合約狀態</label>
+                        <select name="status" id="status" class="form-select" onchange="this.form.submit()">
+                            <option value="ALL" <%=filters.status==='ALL' ? 'selected' : '' %>>全部</option>
+                            <option value="PENDING_APPROVAL" <%=filters.status==='PENDING_APPROVAL' ? 'selected' : '' %>
+                                >待審核</option>
+                            <option value="PENDING_SIGNATURE" <%=filters.status==='PENDING_SIGNATURE' ? 'selected' : ''
+                                %>>待簽署</option>
+                            <option value="SIGNED" <%=filters.status==='SIGNED' ? 'selected' : '' %>>已簽署</option>
+                            <option value="REJECTED" <%=filters.status==='REJECTED' ? 'selected' : '' %>>已駁回</option>
+                            <option value="CANCELLED" <%=filters.status==='CANCELLED' ? 'selected' : '' %>>已作廢</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="limit" class="form-label">每頁顯示</label>
+                        <select name="limit" id="limit" class="form-select" onchange="this.form.submit()">
+                            <option value="10" <%=filters.limit==10 ? 'selected' : '' %>>10 筆</option>
+                            <option value="20" <%=filters.limit==20 ? 'selected' : '' %>>20 筆</option>
+                            <option value="30" <%=filters.limit==30 ? 'selected' : '' %>>30 筆</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <% if (contracts.length===0) { %>
+            <div class="alert alert-info">目前沒有符合條件的合約。</div>
+            <% } else { %>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle shadow-sm bg-white rounded">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">建立時間</th>
+                                <th scope="col">業務員</th>
+                                <th scope="col">合約範本</th>
+                                <th scope="col">客戶名稱</th>
+                                <th scope="col">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% contracts.forEach(contract=> { %>
+                                <tr>
+                                    <td>
+                                        <%= new Date(contract.created_at).toLocaleDateString() %>
+                                    </td>
+                                    <td>
+                                        <%= contract.salesperson_name %>
+                                    </td>
+                                    <td>
+                                        <%= contract.template_name %>
+                                    </td>
+                                    <td>
+                                        <%= contract.client_name || '-' %>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex gap-2">
+                                            <% if (contract.status==='PENDING_APPROVAL' ) { %>
+                                                <form action="/manager/contracts/<%= contract.id %>/approve"
+                                                    method="POST" onsubmit="return confirm('確定要核准此合約嗎？');">
+                                                    <button type="submit" class="btn btn-sm btn-success">核准</button>
+                                                </form>
+                                                <form action="/manager/contracts/<%= contract.id %>/reject"
+                                                    method="POST" onsubmit="return confirm('確定要駁回此合約嗎？');">
+                                                    <button type="submit" class="btn btn-sm btn-danger">駁回</button>
+                                                    <button type="submit" class="btn btn-sm btn-danger">駁回</button>
+                                                </form>
+                                                <% } else { %>
+                                                    <span class="badge bg-secondary">
+                                                        <%= contract.status %>
+                                                    </span>
+                                                    <% } %>
+                                                        <!-- Optional: View details button -->
+                                        </div>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination Controls -->
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item <%= pagination.current == 1 ? 'disabled' : '' %>">
+                            <a class="page-link"
+                                href="/manager/dashboard?page=<%= pagination.current - 1 %>&status=<%= filters.status %>&limit=<%= filters.limit %>">上一頁</a>
+                        </li>
+
+                        <% for(let i=1; i <=pagination.total; i++) { %>
+                            <li class="page-item <%= pagination.current == i ? 'active' : '' %>">
+                                <a class="page-link"
+                                    href="/manager/dashboard?page=<%= i %>&status=<%= filters.status %>&limit=<%= filters.limit %>">
+                                    <%= i %>
+                                </a>
+                            </li>
+                            <% } %>
+
+                                <li class="page-item <%= pagination.current == pagination.total ? 'disabled' : '' %>">
+                                    <a class="page-link"
+                                        href="/manager/dashboard?page=<%= pagination.current + 1 %>&status=<%= filters.status %>&limit=<%= filters.limit %>">下一頁</a>
+                                </li>
+                    </ul>
+                </nav>
+                <% } %>
+    </div>
+
+    <%- include('../partials/footer') %>

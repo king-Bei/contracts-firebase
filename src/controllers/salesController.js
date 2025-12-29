@@ -12,30 +12,44 @@ const salesDashboard = async (req, res) => {
         const flashMessage = req.session.flashMessage || null;
         delete req.session.flashMessage;
 
-        const { start_date, end_date, status } = req.query;
-        const defaultStart = new Date();
-        defaultStart.setMonth(defaultStart.getMonth() - 3);
-        const parsedStart = start_date ? new Date(start_date) : defaultStart;
-        const parsedEnd = end_date ? new Date(end_date) : new Date();
-        const startDate = isNaN(parsedStart) ? defaultStart : parsedStart;
-        const endDate = isNaN(parsedEnd) ? new Date() : parsedEnd;
+        const { start_date, end_date, status, page, limit } = req.query;
+        const salespersonId = req.session.user.id;
 
-        const contracts = await contractModel.findBySalesperson(req.session.user.id, {
-            startDate,
-            endDate,
+        const currentPage = page ? parseInt(page, 10) : 1;
+        const currentLimit = limit ? parseInt(limit, 10) : 10;
+        const offset = (currentPage - 1) * currentLimit;
+
+        const filters = {
+            startDate: start_date,
+            endDate: end_date,
             status: status || 'ALL',
+        };
+
+        const contracts = await contractModel.findBySalesperson(salespersonId, {
+            ...filters,
+            limit: currentLimit,
+            offset: offset
         });
 
+        const totalContracts = await contractModel.countBySalesperson(salespersonId, filters);
+        const totalPages = Math.ceil(totalContracts / currentLimit);
+
         res.render('sales', {
-            title: '業務員儀表板',
+            title: '業務專區',
             contracts,
             user: req.session.user,
             flashMessage,
             filters: {
-                start_date: startDate.toISOString().slice(0, 10),
-                end_date: endDate.toISOString().slice(0, 10),
+                start_date: start_date || '',
+                end_date: end_date || '',
                 status: status || 'ALL',
+                limit: currentLimit
             },
+            pagination: {
+                current: currentPage,
+                total: totalPages,
+                limit: currentLimit
+            }
         });
     } catch (error) {
         console.error('Failed to load sales page:', error);
@@ -235,9 +249,8 @@ const createContract = async (req, res) => {
         };
 
         const newContract = await contractModel.create(contractData);
-        req.session.lastGeneratedCode = newContract.verification_code;
-
-        res.redirect(`/sales/contracts/${newContract.id}`);
+        req.session.flashMessage = '合約已建立，請等待主管審核。';
+        res.redirect('/sales');
 
     } catch (error) {
         console.error('Failed to create contract:', error);
@@ -271,13 +284,17 @@ const viewContract = async (req, res) => {
         const fullShareLink = `${req.protocol}://${req.get('host')}/contracts/sign/${contract.signing_link_token}`;
         const shortShareLink = `${req.protocol}://${req.get('host')}/s/${contract.short_link_code || contract.signing_link_token}`;
 
+        const isApproved = contract.status !== 'PENDING_APPROVAL' && contract.status !== 'REJECTED';
+
         // Use sales specific view
         res.render('sales/contract-details', {
             title: '合約檢視',
             contract,
             previewContent,
-            shareLink: fullShareLink,
-            shortShareLink,
+            shareLink: isApproved ? fullShareLink : null,
+            shortShareLink: isApproved ? shortShareLink : null,
+            plaintextCode: contract.verification_code_plaintext,
+            isApproved,
             user: req.session.user,
         });
     } catch (error) {
@@ -347,6 +364,8 @@ const updateContract = async (req, res) => {
             return res.status(400).send('已簽署合約不可修改');
         }
 
+        const isResubmit = contract.status === 'REJECTED';
+
         const updatedVariables = typeof req.body.variables === 'object' ? req.body.variables : {};
 
         let templateVariables = [];
@@ -365,7 +384,14 @@ const updateContract = async (req, res) => {
         await contractModel.update(contract.id, {
             client_name: req.body.client_name,
             variable_values: normalizedVariables,
+            resubmit: isResubmit
         });
+
+        if (isResubmit) {
+            req.session.flashMessage = '合約已重新送審。';
+        } else {
+            req.session.flashMessage = '合約已更新。';
+        }
 
         res.redirect(`/sales/contracts/${contract.id}`);
     } catch (error) {

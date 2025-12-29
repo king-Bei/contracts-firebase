@@ -38,14 +38,14 @@ async function findAll() {
  * @param {object} templateData - 包含 name, content, variables, logo_url 的物件。
  * @returns {object} - 新建立的範本物件。
  */
-async function create({ name, content, variables, logo_url }) {
+async function create({ name, content, variables, logo_url, requires_approval }) {
   const queryText = `
-    INSERT INTO contract_templates (name, content, variables, logo_url)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO contract_templates (name, content, variables, logo_url, requires_approval)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING *;
   `;
   // 如果 variables 是 JS 物件/陣列，需要轉換成 JSON 字串
-  const values = [name, content, JSON.stringify(variables), logo_url || null];
+  const values = [name, content, JSON.stringify(variables), logo_url || null, requires_approval !== false]; // Default true
   const { rows } = await db.query(queryText, values);
   return rows[0];
 }
@@ -55,7 +55,7 @@ async function create({ name, content, variables, logo_url }) {
  * @returns {Array<object>} - 範本物件陣列。
  */
 async function findAllActive() {
-  const queryText = 'SELECT id, name, is_active, variables FROM contract_templates WHERE is_active = TRUE ORDER BY id ASC';
+  const queryText = 'SELECT id, name, is_active, variables, requires_approval FROM contract_templates WHERE is_active = TRUE ORDER BY id ASC';
   const { rows } = await db.query(queryText);
   return rows;
 }
@@ -77,14 +77,14 @@ async function findById(id) {
  * @param {object} fields - 包含 name, content, variables, is_active, logo_url 的物件。
  * @returns {object|null} - 更新後的範本物件或 null。
  */
-async function update(id, { name, content, variables, is_active, logo_url }) {
+async function update(id, { name, content, variables, is_active, logo_url, requires_approval }) {
   const queryText = `
     UPDATE contract_templates
-    SET name = $1, content = $2, variables = $3, is_active = $4, logo_url = $5, updated_at = CURRENT_TIMESTAMP
-    WHERE id = $6
+    SET name = $1, content = $2, variables = $3, is_active = $4, logo_url = $5, requires_approval = $6, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $7
     RETURNING *;
   `;
-  const values = [name, content, JSON.stringify(variables), is_active, logo_url || null, id];
+  const values = [name, content, JSON.stringify(variables), is_active, logo_url || null, requires_approval !== false, id];
   const { rows } = await db.query(queryText, values);
   return rows[0] || null;
 }

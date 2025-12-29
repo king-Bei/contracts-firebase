@@ -1,37 +1,69 @@
 <%- include('partials/header') %>
 
-<h1><%= title %></h1>
-<p>正在編輯使用者: <strong><%= user.employee_id %></strong></p>
+  <h1>
+    <%= title %>
+  </h1>
+  <p>正在編輯使用者: <strong>
+      <%= user.employee_id %>
+    </strong></p>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <form action="/admin/users/edit/<%= user.id %>" method="POST">
-      <div class="mb-3">
-        <label for="name" class="form-label">姓名</label>
-        <input type="text" class="form-control" id="name" name="name" value="<%= user.name %>" required>
-      </div>
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form action="/admin/users/edit/<%= user.id %>" method="POST">
+        <div class="mb-3">
+          <label for="name" class="form-label">姓名</label>
+          <input type="text" class="form-control" id="name" name="name" value="<%= user.name %>" required>
+        </div>
 
-      <div class="mb-3">
-        <label for="role" class="form-label">角色</label>
-        <select class="form-select" id="role" name="role">
-          <option value="salesperson" <%= user.role === 'salesperson' ? 'selected' : '' %>>Salesperson</option>
-          <option value="admin" <%= user.role === 'admin' ? 'selected' : '' %>>Admin</option>
-        </select>
-      </div>
+        <div class="mb-3">
+          <label class="form-label">權限設定</label>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="is_sales" name="is_sales" <%=user.is_sales ? 'checked'
+              : '' %>>
+            <label class="form-check-label" for="is_sales">業務權限 (Sales)</label>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="is_manager" name="is_manager" <%=user.is_manager
+              ? 'checked' : '' %>>
+            <label class="form-check-label" for="is_manager">主管審核權限 (Manager)</label>
+          </div>
+          <hr>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="can_manage_users" name="can_manage_users"
+              <%=user.can_manage_users ? 'checked' : '' %>>
+            <label class="form-check-label" for="can_manage_users">帳號管理權限 (User Management)</label>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="can_view_all_contracts" name="can_view_all_contracts"
+              <%=user.can_view_all_contracts ? 'checked' : '' %>>
+            <label class="form-check-label" for="can_view_all_contracts">瀏覽所有合約權限 (View All Contracts)</label>
+          </div>
+        </div>
 
-      <div class="mb-3 form-check">
-        <input type="checkbox" class="form-check-input" id="is_active" name="is_active" <%= user.is_active ? 'checked' : '' %>>
-        <label class="form-check-label" for="is_active">啟用帳號</label>
-      </div>
-      
-      <p class="form-text text-muted">
-        注意：此表單不包含密碼修改。密碼應由使用者自行重設，或透過專門的密碼重設功能。
-      </p>
+        <div class="mb-3">
+          <label for="role" class="form-label">帳號類型 (系統)</label>
+          <select class="form-select" id="role" name="role">
+            <option value="salesperson" <%=user.role==='salesperson' ? 'selected' : '' %>>一般員工</option>
+            <option value="manager" <%=user.role==='manager' ? 'selected' : '' %>>主管</option>
+            <option value="admin" <%=user.role==='admin' ? 'selected' : '' %>>系統管理員 (擁有所有權限)</option>
+          </select>
+          <div class="form-text">提示：系統管理員預設擁有所有權限，無論上方勾選與否。</div>
+        </div>
 
-      <button type="submit" class="btn btn-primary">儲存變更</button>
-      <a href="/admin" class="btn btn-secondary">取消</a>
-    </form>
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="is_active" name="is_active" <%=user.is_active ? 'checked'
+            : '' %>>
+          <label class="form-check-label" for="is_active">啟用帳號</label>
+        </div>
+
+        <p class="form-text text-muted">
+          注意：此表單不包含密碼修改。密碼應由使用者自行重設，或透過專門的密碼重設功能。
+        </p>
+
+        <button type="submit" class="btn btn-primary">儲存變更</button>
+        <a href="/admin" class="btn btn-secondary">取消</a>
+      </form>
+    </div>
   </div>
-</div>
 
-<%- include('partials/footer') %>
+  <%- include('partials/footer') %>

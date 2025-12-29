@@ -6,22 +6,67 @@ const { renderTemplateWithVariables } = require('../utils/templateUtils');
 
 const dashboard = async (req, res) => {
     try {
-        const users = await userModel.findAll();
-        const { salesperson_id, start_date, end_date, status } = req.query;
+        const currentUser = req.session.user;
+        let users = [];
+        // Only load users if permitted
+        if (currentUser.can_manage_users) {
+            users = await userModel.findAll();
+        } else {
+            // If not allowed to manage users, maybe we don't load them or load only self? 
+            // Ideally the view won't show the table.
+        }
 
-        const parsedSalespersonId = salesperson_id ? parseInt(salesperson_id, 10) : null;
-        const parsedStart = start_date ? new Date(start_date) : null;
-        const parsedEnd = end_date ? new Date(end_date) : null;
-        const normalizedStatus = status || 'ALL';
+        const { salesperson_id, start_date, end_date, status, page, limit } = req.query;
 
-        const contracts = await contractModel.findAllWithFilters({
-            salespersonId: !isNaN(parsedSalespersonId) ? parsedSalespersonId : null,
-            startDate: parsedStart && !isNaN(parsedStart) ? parsedStart : null,
-            endDate: parsedEnd && !isNaN(parsedEnd) ? parsedEnd : null,
-            status: normalizedStatus,
-        });
+        let contracts = [];
+        let pagination = null;
 
-        const salesUsers = users.filter(u => u.role === 'salesperson');
+        // Only load contracts if permitted
+        if (currentUser.can_view_all_contracts) {
+            const parsedSalespersonId = salesperson_id ? parseInt(salesperson_id, 10) : null;
+            const parsedStart = start_date ? new Date(start_date) : null;
+            const parsedEnd = end_date ? new Date(end_date) : null;
+            const normalizedStatus = status || 'ALL';
+
+            const currentPage = page ? parseInt(page, 10) : 1;
+            const currentLimit = limit ? parseInt(limit, 10) : 10;
+            const offset = (currentPage - 1) * currentLimit;
+
+            contracts = await contractModel.findAllWithFilters({
+                salespersonId: !isNaN(parsedSalespersonId) ? parsedSalespersonId : null,
+                startDate: parsedStart && !isNaN(parsedStart) ? parsedStart : null,
+                endDate: parsedEnd && !isNaN(parsedEnd) ? parsedEnd : null,
+                status: normalizedStatus,
+                limit: currentLimit,
+                offset: offset
+            });
+
+            const totalContracts = await contractModel.countAllWithFilters({
+                salespersonId: !isNaN(parsedSalespersonId) ? parsedSalespersonId : null,
+                startDate: parsedStart && !isNaN(parsedStart) ? parsedStart : null,
+                endDate: parsedEnd && !isNaN(parsedEnd) ? parsedEnd : null,
+                status: normalizedStatus,
+            });
+
+            pagination = {
+                current: currentPage,
+                total: Math.ceil(totalContracts / currentLimit),
+                limit: currentLimit
+            };
+        }
+
+        let salesUsers = [];
+        if (currentUser.can_manage_users || currentUser.can_view_all_contracts) {
+            // We need a list of salespeople for the filter dropdown if viewing contracts,
+            // or for the user list if managing users.
+            // If we didn't load all users above, we might need to fetch them here if we have contract view rights but not user management rights
+            // For simplicity, if we have contract view rights, we probably fetch all users to populate the filter?
+            // Or we just fetch all users if we have EITHER right?
+            if (users.length === 0) {
+                users = await userModel.findAll();
+            }
+            salesUsers = users.filter(u => u.is_sales || u.role === 'salesperson');
+        }
         res.render('admin', {
             title: '管理員後台',
             users: users,
@@ -31,8 +76,10 @@ const dashboard = async (req, res) => {
                 salesperson_id: salesperson_id || '',
                 start_date: start_date || '',
                 end_date: end_date || '',
-                status: normalizedStatus,
+                status: status || 'ALL',
+                limit: limit ? parseInt(limit, 10) : 10
             },
+            pagination // Pass pagination to view
         });
     } catch (error) {
         console.error('Failed to load admin page:', error);
@@ -42,7 +89,11 @@ const dashboard = async (req, res) => {
 
 const createUser = async (req, res) => {
     const { employee_id, password, name } = req.body;
-    const role = 'salesperson'; // 表单默认创建业务员
+    const is_sales = req.body.is_sales === 'on';
+    const is_manager = req.body.is_manager === 'on';
+    const can_manage_users = req.body.can_manage_users === 'on';
+    const can_view_all_contracts = req.body.can_view_all_contracts === 'on';
+    const role = 'salesperson'; // Legacy role field, default to salesperson or maybe 'staff'
 
     try {
         const existingUser = await userModel.findByEmployeeId(employee_id);
@@ -51,7 +102,7 @@ const createUser = async (req, res) => {
             return res.redirect('/admin');
         }
 
-        await userModel.create({ employee_id, password, name, role });
+        await userModel.create({ employee_id, password, name, role, is_sales, is_manager, can_manage_users, can_view_all_contracts });
         res.redirect('/admin');
 
     } catch (error) {
@@ -96,9 +147,13 @@ const updateUser = async (req, res) => {
     const { name, role } = req.body;
     // HTML checkbox 如果沒被勾選，就不會被包含在請求中，所以需要這樣處理
     const is_active = req.body.is_active === 'on';
+    const is_sales = req.body.is_sales === 'on';
+    const is_manager = req.body.is_manager === 'on';
+    const can_manage_users = req.body.can_manage_users === 'on';
+    const can_view_all_contracts = req.body.can_view_all_contracts === 'on';
 
     try {
-        await userModel.update(id, { name, role, is_active });
+        await userModel.update(id, { name, role, is_active, is_sales, is_manager, can_manage_users, can_view_all_contracts });
         res.redirect('/admin');
     } catch (error) {
         console.error('Failed to update user:', error);

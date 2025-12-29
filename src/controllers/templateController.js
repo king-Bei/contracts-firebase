@@ -27,6 +27,7 @@ const createTemplate = async (req, res) => {
             content,
             variables,
             logo_url: req.body.logo_url?.trim() || null,
+            requires_approval: req.body.requires_approval === 'on'
         });
         res.redirect('/admin/templates');
     } catch (error) {
@@ -68,6 +69,7 @@ const updateTemplate = async (req, res) => {
             variables,
             is_active: req.body.is_active === 'on',
             logo_url: req.body.logo_url?.trim() || null,
+            requires_approval: req.body.requires_approval === 'on'
         });
 
         res.redirect('/admin/templates');

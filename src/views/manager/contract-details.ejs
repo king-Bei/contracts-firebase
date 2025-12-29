@@ -1,0 +1,99 @@
+<%- include('../partials/header') %>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>合約詳情審核</h1>
+        <a href="/manager/dashboard" class="btn btn-secondary">返回列表</a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h2>合約內容預覽</h2>
+                </div>
+                <div class="card-body">
+                    <div class="contract-preview border p-4 bg-light">
+                        <%- previewContent %>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h2>合約資訊</h2>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item"><strong>ID:</strong>
+                            <%= contract.id %>
+                        </li>
+                        <li class="list-group-item"><strong>客戶名稱:</strong>
+                            <%= contract.client_name %>
+                        </li>
+                        <li class="list-group-item"><strong>合約範本:</strong>
+                            <%= contract.template_name %>
+                        </li>
+                        <li class="list-group-item"><strong>業務員:</strong>
+                            <%= contract.salesperson_name %>
+                        </li>
+                        <li class="list-group-item"><strong>狀態:</strong>
+                            <% if (contract.status==='PENDING_APPROVAL' ) { %>
+                                <span class="badge bg-info text-dark">待審核</span>
+                                <% } else if (contract.status==='REJECTED' ) { %>
+                                    <span class="badge bg-danger">審核駁回</span>
+                                    <% } else if (contract.status==='PENDING_SIGNATURE' ) { %>
+                                        <span class="badge bg-warning text-dark">待簽署</span>
+                                        <% } else if (contract.status==='SIGNED' ) { %>
+                                            <span class="badge bg-success">已簽署</span>
+                                            <% } else { %>
+                                                <%= contract.status %>
+                                                    <% } %>
+                        </li>
+                        <li class="list-group-item"><strong>建立時間:</strong>
+                            <%= new Date(contract.created_at).toLocaleString() %>
+                        </li>
+                    </ul>
+
+                    <% if (contract.status==='PENDING_APPROVAL' ) { %>
+                        <div class="mt-4 d-grid gap-2">
+                            <form action="/manager/contracts/<%= contract.id %>/approve" method="POST">
+                                <button type="submit" class="btn btn-success w-100 mb-2">核准合約</button>
+                            </form>
+                            <button type="button" class="btn btn-danger w-100" data-bs-toggle="modal"
+                                data-bs-target="#rejectModal">
+                                駁回合約
+                            </button>
+                        </div>
+                        <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Modal -->
+    <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="/manager/contracts/<%= contract.id %>/reject" method="POST">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="rejectModalLabel">駁回原因</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="rejectReason" class="form-label">請輸入駁回原因，讓業務員知道如何修改：</label>
+                            <textarea class="form-control" id="rejectReason" name="reason" rows="3" required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-danger">確認駁回</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <%- include('../partials/footer') %>

@@ -14,7 +14,7 @@ async function createContractsTable() {
       template_id INT NOT NULL REFERENCES contract_templates(id),
       salesperson_id INT NOT NULL REFERENCES users(id),
       variable_values JSONB NOT NULL,
-      status VARCHAR(50) NOT NULL DEFAULT 'DRAFT', -- e.g., 'DRAFT', 'PENDING_SIGNATURE', 'SIGNED'
+      status VARCHAR(50) NOT NULL DEFAULT 'PENDING_APPROVAL', -- 'PENDING_APPROVAL', 'PENDING_SIGNATURE', 'SIGNED', 'REJECTED'
       client_name VARCHAR(255),
       verification_code_hash VARCHAR(255), -- Hash of the code client needs to enter
       verification_code_plaintext VARCHAR(6), -- Plain code for internal reference
@@ -83,7 +83,7 @@ async function findAll() {
 /**
  * 取得全站合約，並依條件篩選
  */
-async function findAllWithFilters({ salespersonId, startDate, endDate, status } = {}) {
+async function findAllWithFilters({ salespersonId, startDate, endDate, status, limit, offset } = {}) {
   const conditions = ['1=1'];
   const values = [];
   let idx = 1;
@@ -105,7 +105,7 @@ async function findAllWithFilters({ salespersonId, startDate, endDate, status } 
     values.push(status);
   }
 
-  const queryText = `
+  let queryText = `
     SELECT
       c.id,
       c.status,
@@ -118,10 +118,48 @@ async function findAllWithFilters({ salespersonId, startDate, endDate, status } 
     LEFT JOIN users u ON c.salesperson_id = u.id
     LEFT JOIN contract_templates ct ON c.template_id = ct.id
     WHERE ${conditions.join(' AND ')}
-    ORDER BY c.created_at DESC;
+    ORDER BY c.created_at DESC
   `;
+
+  if (limit !== undefined && offset !== undefined) {
+    queryText += ` LIMIT $${idx++} OFFSET $${idx++}`;
+    values.push(limit, offset);
+  }
+
   const { rows } = await db.query(queryText, values);
   return rows;
+}
+
+async function countAllWithFilters({ salespersonId, startDate, endDate, status } = {}) {
+  const conditions = ['1=1'];
+  const values = [];
+  let idx = 1;
+
+  if (salespersonId) {
+    conditions.push(`salesperson_id = $${idx++}`);
+    values.push(salespersonId);
+  }
+  if (startDate) {
+    conditions.push(`created_at >= $${idx++}`);
+    values.push(startDate);
+  }
+  if (endDate) {
+    conditions.push(`created_at <= $${idx++}`);
+    values.push(endDate);
+  }
+  if (status && status !== 'ALL') {
+    conditions.push(`status = $${idx++}`);
+    values.push(status);
+  }
+
+  const queryText = `
+    SELECT COUNT(*) as total
+    FROM contracts c
+    WHERE ${conditions.join(' AND ')}
+  `;
+
+  const { rows } = await db.query(queryText, values);
+  return parseInt(rows[0].total, 10);
 }
 
 
@@ -143,11 +181,18 @@ async function create(contractData) {
   const verification_code = Math.floor(100000 + Math.random() * 900000).toString();
   const verification_code_hash = await bcrypt.hash(verification_code, 10); // Using bcrypt for hashing
 
+  // 2b. Check if template requires approval
+  const templateQuery = 'SELECT requires_approval FROM contract_templates WHERE id = $1';
+  const templateResult = await db.query(templateQuery, [template_id]);
+  const requiresApproval = templateResult.rows[0]?.requires_approval !== false; // Default true
+
+  const initialStatus = requiresApproval ? 'PENDING_APPROVAL' : 'PENDING_SIGNATURE';
+
   // 3. Insert into database
   const queryText = `
     INSERT INTO contracts
       (salesperson_id, template_id, client_name, variable_values, signing_link_token, short_link_code, verification_code_hash, verification_code_plaintext, status)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING_SIGNATURE')
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING *;
   `;
   const values = [
@@ -159,6 +204,7 @@ async function create(contractData) {
     short_link_code,
     verification_code_hash,
     verification_code, // Store plaintext code as requested by user
+    initialStatus
   ];
 
   const { rows } = await db.query(queryText, values);
@@ -184,6 +230,7 @@ async function findById(id) {
       c.signed_at,
       c.created_at,
       c.salesperson_id,
+      c.rejection_reason,
       u.name as salesperson_name,
       ct.name as template_name,
       ct.content as template_content,
@@ -234,7 +281,7 @@ async function findByToken(token) {
  * @param {number} salespersonId - 業務員的使用者 ID
  * @returns {Array<object>} - 合約物件陣列
  */
-async function findBySalesperson(salespersonId, { startDate, endDate, status } = {}) {
+async function findBySalesperson(salespersonId, { startDate, endDate, status, limit, offset } = {}) {
   const conditions = ['c.salesperson_id = $1'];
   const values = [salespersonId];
   let index = 2;
@@ -254,7 +301,7 @@ async function findBySalesperson(salespersonId, { startDate, endDate, status } =
     values.push(status);
   }
 
-  const queryText = `
+  let queryText = `
     SELECT
       c.id,
       c.status,
@@ -266,23 +313,76 @@ async function findBySalesperson(salespersonId, { startDate, endDate, status } =
     FROM contracts c
     LEFT JOIN contract_templates ct ON c.template_id = ct.id
     WHERE ${conditions.join(' AND ')}
-    ORDER BY c.created_at DESC;
+    ORDER BY c.created_at DESC
   `;
+
+  if (limit !== undefined && offset !== undefined) {
+    queryText += ` LIMIT $${index++} OFFSET $${index++}`;
+    values.push(limit, offset);
+  }
 
   const { rows } = await db.query(queryText, values);
   return rows;
 }
 
-async function update(id, { client_name, variable_values }) {
+async function countBySalesperson(salespersonId, { startDate, endDate, status } = {}) {
+  const conditions = ['salesperson_id = $1'];
+  const values = [salespersonId];
+  let index = 2;
+
+  if (startDate) {
+    conditions.push(`created_at >= $${index++}`);
+    values.push(startDate);
+  }
+  if (endDate) {
+    conditions.push(`created_at <= $${index++}`);
+    values.push(endDate);
+  }
+  if (status && status !== 'ALL') {
+    conditions.push(`status = $${index++}`);
+    values.push(status);
+  }
+
+  const queryText = `
+    SELECT COUNT(*) as total
+    FROM contracts
+    WHERE ${conditions.join(' AND ')}
+  `;
+
+  const { rows } = await db.query(queryText, values);
+  return parseInt(rows[0].total, 10);
+}
+
+async function update(id, { client_name, variable_values, resubmit }) {
+  const updates = [];
+  const values = [];
+  let idx = 1;
+
+  if (client_name !== undefined) {
+    updates.push(`client_name = $${idx++}`);
+    values.push(client_name);
+  }
+  if (variable_values !== undefined) {
+    updates.push(`variable_values = $${idx++}`);
+    values.push(variable_values);
+  }
+
+  // If resubmitting (e.g. after rejection), reset status to PENDING_APPROVAL and clear rejection reason
+  if (resubmit) {
+    updates.push(`status = 'PENDING_APPROVAL'`);
+    updates.push(`rejection_reason = NULL`);
+  }
+
+  updates.push(`updated_at = CURRENT_TIMESTAMP`);
+  values.push(id);
+
   const queryText = `
     UPDATE contracts
-    SET client_name = $1,
-        variable_values = $2,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = $3
+    SET ${updates.join(', ')}
+    WHERE id = $${idx}
     RETURNING *;
   `;
-  const { rows } = await db.query(queryText, [client_name, variable_values, id]);
+  const { rows } = await db.query(queryText, values);
   return rows[0] || null;
 }
 
@@ -341,6 +441,31 @@ async function cancel(id, salespersonId) {
   return rows[0] || null;
 }
 
+async function approve(id, managerId) {
+  const queryText = `
+    UPDATE contracts
+    SET status = 'PENDING_SIGNATURE',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1 AND status = 'PENDING_APPROVAL'
+    RETURNING *;
+  `;
+  const { rows } = await db.query(queryText, [id]);
+  return rows[0] || null;
+}
+
+async function reject(id, managerId, reason) {
+  const queryText = `
+      UPDATE contracts
+      SET status = 'REJECTED',
+          rejection_reason = $2,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'PENDING_APPROVAL'
+      RETURNING *;
+    `;
+  const { rows } = await db.query(queryText, [id, reason]);
+  return rows[0] || null;
+}
+
 module.exports = {
   createContractsTable,
   findAll,
@@ -354,4 +479,12 @@ module.exports = {
   update,
   ensureShortLinkCode,
   cancel,
+  approve,
+  reject,
+  approve,
+  reject,
+  approve,
+  reject,
+  countAllWithFilters,
+  countBySalesperson,
 };

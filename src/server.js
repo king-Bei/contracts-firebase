@@ -22,10 +22,11 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const templateRoutes = require('./routes/templateRoutes');
 const salesRoutes = require('./routes/salesRoutes');
+const managerRoutes = require('./routes/managerRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 
 // Middleware
-const { checkAuth, checkAdmin } = require('./middleware/authMiddleware');
+const { checkAuth, checkAdmin, checkManager } = require('./middleware/authMiddleware');
 
 const app = express();
 // 在 Cloud Run 或其他代理後端運行時，必須信任 proxy 才能正確設定 secure cookie
@@ -124,6 +125,7 @@ app.use('/contracts', publicRoutes);
 // Protected Admin Routes
 app.use('/admin/templates', checkAuth, checkAdmin, templateRoutes);
 app.use('/admin', checkAuth, checkAdmin, adminRoutes);
+app.use('/manager', checkAuth, checkManager, managerRoutes);
 
 // Protected Sales Routes
 app.use('/sales', checkAuth, salesRoutes);
@@ -131,8 +133,14 @@ app.use('/sales', checkAuth, salesRoutes);
 // Root Redirect
 app.get('/', (req, res) => {
   if (req.session.user) {
-    const redirectPath = req.session.user.role === 'admin' ? '/admin' : '/sales';
-    res.redirect(redirectPath);
+    const user = req.session.user;
+    if (user.role === 'admin' || user.can_manage_users || user.can_view_all_contracts) {
+      res.redirect('/admin');
+    } else if (user.role === 'manager' || user.is_manager) {
+      res.redirect('/manager/dashboard');
+    } else {
+      res.redirect('/sales');
+    }
   } else {
     res.redirect('/login');
   }

@@ -47,6 +47,10 @@ const login = async (req, res) => {
             employee_id: user.employee_id,
             name: user.name,
             role: user.role,
+            is_sales: user.is_sales,
+            is_manager: user.is_manager,
+            can_manage_users: user.can_manage_users,
+            can_view_all_contracts: user.can_view_all_contracts,
         };
 
         // Log successful login

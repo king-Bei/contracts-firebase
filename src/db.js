@@ -17,6 +17,10 @@ const pool = new Pool({
     rejectUnauthorized: false, // 在本地開發時可以接受，生產環境建議使用更嚴格的設定
   },
   client_encoding: 'UTF8',
+  // 強制使用 IPv4 避免某些環境下解析到 IPv6 導致連線失敗
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 });
 
 // 監聽連線池的錯誤

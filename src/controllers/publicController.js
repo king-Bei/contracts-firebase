@@ -47,6 +47,12 @@ const signContractPage = async (req, res) => {
             });
         }
 
+        // Face-to-Face Signing Logic
+        if (req.query.mode === 'face-to-face' && req.session && req.session.user && (req.session.user.role === 'salesperson' || req.session.user.role === 'manager')) {
+            markContractVerified(req, req.params.token);
+            return res.redirect(`/contracts/sign/${req.params.token}`);
+        }
+
         // For signable contracts, pass data to the view for rendering, including inputs.
         res.render('sign-contract', {
             title: '合約簽署',

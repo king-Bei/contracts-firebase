@@ -1,5 +1,6 @@
 .gcloudignore
 .git
+.cursorrules
 .gitignore
 node_modules
 npm-debug.log

@@ -110,16 +110,20 @@
                       </td>
                       <td>
                         <a href="/sales/contracts/<%= contract.id %>" class="btn btn-sm btn-outline-info">詳情</a>
-                        <% if (contract.status !=='SIGNED' ) { %>
-                          <a href="/sales/contracts/<%= contract.id %>/edit"
-                            class="btn btn-sm btn-outline-warning">編輯</a>
-                          <% if (contract.status !=='CANCELLED' ) { %>
-                            <form action="/sales/contracts/<%= contract.id %>/cancel" method="POST" class="d-inline"
-                              onsubmit="return confirm('確定要作廢此合約嗎？');">
-                              <button type="submit" class="btn btn-sm btn-outline-danger">作廢</button>
-                            </form>
-                            <% } %>
-                              <% } %>
+                        <% if (contract.status==='PENDING_SIGNATURE' ) { %>
+                          <a href="/contracts/sign/<%= contract.signing_link_token || contract.short_link_code %>?mode=face-to-face"
+                            target="_blank" class="btn btn-sm btn-outline-primary">面對面簽約</a>
+                          <% } %>
+                            <% if (contract.status !=='SIGNED' ) { %>
+                              <a href="/sales/contracts/<%= contract.id %>/edit"
+                                class="btn btn-sm btn-outline-warning">編輯</a>
+                              <% if (contract.status !=='CANCELLED' ) { %>
+                                <form action="/sales/contracts/<%= contract.id %>/cancel" method="POST" class="d-inline"
+                                  onsubmit="return confirm('確定要作廢此合約嗎？');">
+                                  <button type="submit" class="btn btn-sm btn-outline-danger">作廢</button>
+                                </form>
+                                <% } %>
+                                  <% } %>
                       </td>
                     </tr>
                     <% }) %>

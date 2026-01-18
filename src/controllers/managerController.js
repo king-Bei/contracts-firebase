@@ -19,7 +19,7 @@ const dashboard = async (req, res) => {
         // "主管審核可查詢所有合約列表" -> Manager Review can query ALL.
         // But the primary purpose is approval. Let's default to PENDING_APPROVAL if no status provided, 
         // BUT allow changing to ALL.
-        const filterStatus = status || 'PENDING_APPROVAL';
+        const filterStatus = status || 'ALL';
 
         const contracts = await contractModel.findAllWithFilters({
             status: filterStatus,
@@ -44,7 +44,8 @@ const dashboard = async (req, res) => {
                 current: currentPage,
                 total: totalPages,
                 limit: currentLimit
-            }
+            },
+            user: req.session.user
         });
     } catch (error) {
         console.error('Failed to load manager dashboard:', error);

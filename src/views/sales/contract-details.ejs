@@ -172,13 +172,15 @@
       const resetMessageBtn = document.getElementById('reset-message');
       const copyMessageBtn = document.getElementById('copy-message');
 
+      // Define variables from server-side EJS
+      const contractClientName = "<%= contract.client_name || '客戶' %>";
+      const contractTemplateName = "<%= contract.template_name %>";
+      const contractShortLink = "<%= shortShareLink %>";
+      const contractVerificationCode = "<%= plaintextCode || '' %>";
+
       function buildDefaultMessage() {
-        const name = <% - JSON.stringify(contract.client_name || '客戶') %>;
-        const templateName = <% - JSON.stringify(contract.template_name) %>;
-        const shortLink = <% - JSON.stringify(shortShareLink) %>;
-        const code = <% - JSON.stringify(plaintextCode || '') %>;
-        const codeLine = code ? `驗證碼：${code}` : '驗證碼請向我索取';
-        return `親愛的${name}，這是您的「${templateName}」簽署連結：${shortLink}\n${codeLine}`;
+        const codeLine = contractVerificationCode ? `\n驗證碼：${contractVerificationCode}` : '';
+        return `${contractClientName} ${contractTemplateName} \n${contractShortLink} ${codeLine}`;
       }
 
       if (shareMessageInput) {
@@ -188,11 +190,20 @@
       if (copyShortLinkBtn) {
         copyShortLinkBtn.addEventListener('click', async () => {
           const linkInput = document.getElementById('short-share-link');
+          if (!linkInput) return;
           try {
             await navigator.clipboard.writeText(linkInput.value);
+            const originalText = copyShortLinkBtn.textContent;
             copyShortLinkBtn.textContent = '已複製';
-            setTimeout(() => copyShortLinkBtn.textContent = '複製', 1500);
+            copyShortLinkBtn.classList.remove('btn-outline-primary');
+            copyShortLinkBtn.classList.add('btn-success');
+            setTimeout(() => {
+              copyShortLinkBtn.textContent = originalText;
+              copyShortLinkBtn.classList.remove('btn-success');
+              copyShortLinkBtn.classList.add('btn-outline-primary');
+            }, 1500);
           } catch (e) {
+            console.error(e);
             alert('無法複製，請手動選取文字。');
           }
         });

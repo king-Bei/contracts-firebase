@@ -21,6 +21,9 @@ async function createContractTemplatesTable() {
   try {
     await db.query(queryText);
     await db.query('ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS logo_url TEXT;');
+    await db.query('ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS base_pdf_id UUID;');
+    await db.query('ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN DEFAULT TRUE;');
+    await db.query('ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS code VARCHAR(10) UNIQUE;');
     console.log('Contract templates table checked/created successfully.');
   } catch (error) {
     console.error('Error creating contract templates table:', error.message);
@@ -35,17 +38,17 @@ async function findAll() {
 
 /**
  * 建立新合約範本。
- * @param {object} templateData - 包含 name, content, variables, logo_url 的物件。
+ * @param {object} templateData - 包含 name, content, variables, logo_url, code 的物件。
  * @returns {object} - 新建立的範本物件。
  */
-async function create({ name, content, variables, logo_url, requires_approval }) {
+async function create({ name, content, variables, logo_url, requires_approval, code, base_pdf_id }) {
   const queryText = `
-    INSERT INTO contract_templates (name, content, variables, logo_url, requires_approval)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO contract_templates (name, content, variables, logo_url, requires_approval, code, base_pdf_id)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *;
   `;
   // 如果 variables 是 JS 物件/陣列，需要轉換成 JSON 字串
-  const values = [name, content, JSON.stringify(variables), logo_url || null, requires_approval !== false]; // Default true
+  const values = [name, content, JSON.stringify(variables), logo_url || null, requires_approval !== false, code, base_pdf_id || null];
   const { rows } = await db.query(queryText, values);
   return rows[0];
 }
@@ -55,7 +58,7 @@ async function create({ name, content, variables, logo_url, requires_approval })
  * @returns {Array<object>} - 範本物件陣列。
  */
 async function findAllActive() {
-  const queryText = 'SELECT id, name, is_active, variables, requires_approval FROM contract_templates WHERE is_active = TRUE ORDER BY id ASC';
+  const queryText = 'SELECT id, name, is_active, variables, requires_approval, code FROM contract_templates WHERE is_active = TRUE ORDER BY id ASC';
   const { rows } = await db.query(queryText);
   return rows;
 }
@@ -74,17 +77,18 @@ async function findById(id) {
 /**
  * 更新合約範本。
  * @param {number} id - 範本 ID。
- * @param {object} fields - 包含 name, content, variables, is_active, logo_url 的物件。
+ * @param {object} fields - 包含 name, content, variables, is_active, logo_url, requires_approval 的物件。
  * @returns {object|null} - 更新後的範本物件或 null。
  */
-async function update(id, { name, content, variables, is_active, logo_url, requires_approval }) {
+async function update(id, { name, content, variables, is_active, logo_url, requires_approval, base_pdf_id }) {
+  // code cannot be updated as per user requirement
   const queryText = `
     UPDATE contract_templates
-    SET name = $1, content = $2, variables = $3, is_active = $4, logo_url = $5, requires_approval = $6, updated_at = CURRENT_TIMESTAMP
-    WHERE id = $7
+    SET name = $1, content = $2, variables = $3, is_active = $4, logo_url = $5, requires_approval = $6, base_pdf_id = $7, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $8
     RETURNING *;
   `;
-  const values = [name, content, JSON.stringify(variables), is_active, logo_url || null, requires_approval !== false, id];
+  const values = [name, content, JSON.stringify(variables), is_active, logo_url || null, requires_approval !== false, base_pdf_id || null, id];
   const { rows } = await db.query(queryText, values);
   return rows[0] || null;
 }

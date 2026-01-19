@@ -1,333 +1,293 @@
-const PDFDocument = require('pdfkit');
+const puppeteer = require('puppeteer');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+const signer = require('node-signpdf').default;
+const { plainAddPlaceholder } = require('node-signpdf/dist/helpers');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const fileModel = require('../models/fileModel');
-const { renderTemplateWithVariables } = require('../utils/templateUtils');
 
-const NOTO_SANS_TC_URL = 'https://fonts.gstatic.com/ea/notosanstc/v1/NotoSansTC-Regular.otf';
-const LOCAL_TCFONT_PATH = path.join(__dirname, '..', '..', 'fonts', 'NotoSansTC-Regular.otf');
-let cachedTcFont = null;
+const CERT_PATH = path.join(__dirname, '../../certs/certificate.p12');
+const CERT_PASSWORD = process.env.CERT_PASSWORD || 'secret'; // Default or from env
 
-const fetchFontBuffer = (url) => {
-    return new Promise(resolve => {
-        if (!url) return resolve(null);
-        try {
-            https.get(url, res => {
-                if (res.statusCode !== 200) {
-                    res.resume();
-                    return resolve(null);
-                }
-                const data = [];
-                res.on('data', chunk => data.push(chunk));
-                res.on('end', () => resolve(Buffer.concat(data)));
-            }).on('error', () => resolve(null));
-        } catch (err) {
-            resolve(null);
-        }
+/**
+ * Generate PDF from HTML content
+ * @param {string} htmlContent - The HTML string
+ * @returns {Promise<Buffer>} - PDF Buffer
+ */
+async function generatePdfFromHtml(htmlContent) {
+    const browser = await puppeteer.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for some environments
+        headless: 'new'
     });
-};
+    const page = await browser.newPage();
 
-const getTraditionalChineseFont = async () => {
-    if (cachedTcFont) return cachedTcFont;
-    try {
-        if (fs.existsSync(LOCAL_TCFONT_PATH)) {
-            cachedTcFont = fs.readFileSync(LOCAL_TCFONT_PATH);
-            return cachedTcFont;
-        }
-    } catch (err) {
-        // ignore and fallback to remote
-    }
-    cachedTcFont = await fetchFontBuffer(NOTO_SANS_TC_URL);
-    return cachedTcFont;
-};
-
-const fetchImageBuffer = (url) => {
-    return new Promise(resolve => {
-        if (!url) return resolve(null);
-
-        // data URL
-        if (url.startsWith('data:image')) {
-            const base64 = url.split(',')[1];
-            try {
-                return resolve(Buffer.from(base64, 'base64'));
-            } catch (err) {
-                return resolve(null);
+    // Set content and wait for network idle to ensure images load
+    const fullHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { 
+                font-family: serif; 
+                white-space: pre-wrap; 
+                line-height: 1.6; 
+                color: #333;
+                margin: 0;
+                padding: 40px;
             }
-        }
+            img { max-width: 100%; height: auto; }
+            strong { font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        ${htmlContent}
+    </body>
+    </html>
+    `;
+    await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
 
-        try {
-            https.get(url, res => {
-                if (res.statusCode !== 200) {
-                    res.resume();
-                    return resolve(null);
-                }
-                const data = [];
-                res.on('data', chunk => data.push(chunk));
-                res.on('end', () => resolve(Buffer.concat(data)));
-            }).on('error', () => resolve(null));
-        } catch (err) {
-            resolve(null);
-        }
+    // Generate PDF
+    const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
     });
-};
 
-const htmlToPlain = (html) => {
-    if (!html) return '';
-    return html
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n')
-        .replace(/<\/div>/gi, '\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-};
+    await browser.close();
+    return Buffer.from(pdfBuffer);
+}
 
-const parseStyleMap = (styleString = '') => {
-    const styles = {};
-    styleString.split(';').forEach(pair => {
-        const [rawKey, rawVal] = pair.split(':');
-        if (!rawKey || !rawVal) return;
-        styles[rawKey.trim().toLowerCase()] = rawVal.trim();
-    });
-    return styles;
-};
-
-const dataUrlToBuffer = (dataUrl) => {
-    if (!dataUrl || typeof dataUrl !== 'string') return null;
-    const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
-    if (!match) return null;
-    return Buffer.from(match[2], 'base64');
-};
-
-const extractContentPartsWithImages = (html) => {
-    const parts = [];
-    if (!html) return parts;
-
-    const imgRegex = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = imgRegex.exec(html)) !== null) {
-        const before = html.slice(lastIndex, match.index);
-        const textContent = htmlToPlain(before);
-        if (textContent) {
-            parts.push({ type: 'text', content: textContent });
-        }
-        const src = match[1];
-        const fullTag = match[0] || '';
-        const styleMatch = fullTag.match(/style=["']([^"']*)["']/i);
-        const widthMatch = fullTag.match(/\bwidth=["']([^"']+)["']/i);
-        const heightMatch = fullTag.match(/\bheight=["']([^"']+)["']/i);
-        const styles = parseStyleMap(styleMatch ? styleMatch[1] : '');
-        if (widthMatch && !styles.width) styles.width = widthMatch[1];
-        if (heightMatch && !styles.height) styles.height = heightMatch[1];
-
-        if (src) {
-            parts.push({ type: 'image', src, styles });
-        }
-        lastIndex = imgRegex.lastIndex;
+/**
+ * Add Signature Image and Flatten
+ * @param {Buffer} pdfBuffer 
+ * @param {string} signatureBase64 - Data URL or base64 string
+ * @returns {Promise<Buffer>}
+ */
+async function addSignatureAndFlatten(pdfBuffer, signatureBase64) {
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pages = pdfDoc.getPages();
+    if (pages.length === 0) {
+        throw new Error('PDF has no pages');
     }
+    const lastPage = pages[pages.length - 1]; // Assumption: Signature on last page
 
-    const remaining = html.slice(lastIndex);
-    const remainingText = htmlToPlain(remaining);
-    if (remainingText) {
-        parts.push({ type: 'text', content: remainingText });
-    }
-
-    return parts;
-};
-
-const computeImageOptions = (styles = {}, pageWidth = 400, pageHeight = 400) => {
-    const parseLength = (value, base) => {
-        if (!value) return null;
-        const trimmed = value.trim();
-        const percentMatch = trimmed.match(/^([0-9.]+)%$/);
-        if (percentMatch) {
-            return base * (parseFloat(percentMatch[1]) / 100);
-        }
-        const pxMatch = trimmed.match(/^([0-9.]+)px$/);
-        if (pxMatch) {
-            return parseFloat(pxMatch[1]);
-        }
-        const numMatch = trimmed.match(/^([0-9.]+)$/);
-        if (numMatch) {
-            return parseFloat(numMatch[1]);
-        }
-        return null;
-    };
-
-    const widthVal = parseLength(styles.width, pageWidth);
-    const heightVal = parseLength(styles.height, pageHeight);
-    const maxWidthVal = parseLength(styles['max-width'], pageWidth);
-    const maxHeightVal = parseLength(styles['max-height'], pageHeight);
-
-    let targetWidth = widthVal || maxWidthVal || pageWidth;
-    let targetHeight = heightVal || maxHeightVal || null;
-
-    if (maxWidthVal && targetWidth > maxWidthVal) {
-        targetWidth = maxWidthVal;
-    }
-    if (maxHeightVal && targetHeight && targetHeight > maxHeightVal) {
-        targetHeight = maxHeightVal;
-    }
-
-    const options = { align: 'left' };
-    if (targetWidth && targetHeight) {
-        options.fit = [targetWidth, targetHeight];
-    } else if (targetWidth) {
-        options.width = targetWidth;
-    } else if (targetHeight) {
-        options.height = targetHeight;
+    // Embed PNG/JPG
+    let signatureImage;
+    if (signatureBase64.startsWith('data:image/png')) {
+        signatureImage = await pdfDoc.embedPng(signatureBase64);
+    } else if (signatureBase64.startsWith('data:image/jpeg') || signatureBase64.startsWith('data:image/jpg')) {
+        signatureImage = await pdfDoc.embedJpg(signatureBase64);
     } else {
-        options.fit = [pageWidth, pageHeight / 2];
-    }
-    return options;
-};
-
-const SIGN_PLACEHOLDER = '簽署欄位';
-
-const applyContractPdfContent = async (doc, contract) => {
-    const tcFont = await getTraditionalChineseFont();
-    if (tcFont) {
-        doc.registerFont('NotoTC', tcFont);
-        doc.font('NotoTC');
-    }
-
-    // 標頭資訊
-    if (contract.template_logo_url) {
-        const logoBuffer = await fetchImageBuffer(contract.template_logo_url);
-        if (logoBuffer) {
-            doc.image(logoBuffer, { fit: [220, 120], align: 'center' });
-            doc.moveDown();
-        }
-    }
-
-    doc.fontSize(16).text(contract.template_name || '合約', { underline: true });
-    doc.moveDown(0.5);
-    doc.fontSize(12).text(`客戶：${contract.client_name || '-'}`);
-    doc.text(`狀態：${contract.status}`);
-    if (contract.signed_at) {
-        doc.text(`簽署時間：${new Date(contract.signed_at).toLocaleString()}`);
-    }
-    doc.moveDown();
-
-    // 內容
-    const filledContent = renderTemplateWithVariables(contract.template_content, contract.variable_values, contract.template_variables, {
-        wrapBold: false,
-        signatureImage: null, // Don't embed signature in HTML, handle manually below
-        signaturePlaceholder: SIGN_PLACEHOLDER,
-    });
-    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const pageHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
-    const parts = filledContent.split(SIGN_PLACEHOLDER);
-    // Re-architecture: Support signature_file_id
-    let sigBuffer = null;
-    const hasSignature = Boolean(contract.signature_image || contract.signature_file_id);
-
-    if (contract.signature_file_id) {
+        // Try guessing or assume PNG if just base64
         try {
-            const fileRecord = await fileModel.getFile(contract.signature_file_id);
-            if (fileRecord && fileRecord.data) {
-                sigBuffer = fileRecord.data;
-            }
-        } catch (err) {
-            console.error('Failed to fetch signature file from DB:', err);
+            signatureImage = await pdfDoc.embedPng(signatureBase64);
+        } catch (e) {
+            signatureImage = await pdfDoc.embedJpg(signatureBase64);
         }
     }
 
-    if (!sigBuffer && contract.signature_image) {
-        sigBuffer = await fetchImageBuffer(contract.signature_image);
+    // Use fixed width/height for signature to ensure consistency
+    const TARGET_WIDTH = 120; // Default signature width
+    const imgProps = signatureImage.scale(1.0);
+    const scale = TARGET_WIDTH / imgProps.width;
+    const width = imgProps.width * scale;
+    const height = imgProps.height * scale;
+
+    const { width: pageWidth, height: pageHeight } = lastPage.getSize();
+
+    // Draw at bottom right (approximate position)
+    lastPage.drawImage(signatureImage, {
+        x: pageWidth - width - 60,
+        y: 80, // Slightly higher for visibility
+        width,
+        height,
+    });
+
+    // Flatten: pdf-lib doesn't have a "flatten all" that rasterizes, 
+    // but flattening form fields is done via form.flatten(). 
+    // Since we start from HTML, there are no fields. 
+    // The requirement "Flatten" likely means "Burn into PDF", which drawImage does.
+
+    // Save
+    const pdfBytes = await pdfDoc.save();
+    return Buffer.from(pdfBytes);
+}
+
+/**
+ * Add Audit Page
+ * @param {Buffer} pdfBuffer 
+ * @param {object} auditInfo - { ip, timestamp, uuid, signerName }
+ * @returns {Promise<Buffer>}
+ */
+async function addAuditPage(pdfBuffer, auditInfo) {
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    if (pdfDoc.getPageCount() === 0) {
+        // If empty, creating first page instead of adding one might be safer but addPage is fine
     }
+    const page = pdfDoc.addPage();
+    const { width, height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontSize = 12;
 
-    doc.fontSize(12);
-    for (let i = 0; i < parts.length; i++) {
-        const contentBlocks = extractContentPartsWithImages(parts[i]);
-        for (const block of contentBlocks) {
-            if (block.type === 'text') {
-                doc.text(block.content);
-                doc.moveDown(0.5);
-            } else if (block.type === 'image') {
-                const imgBuffer = block.src.startsWith('data:')
-                    ? dataUrlToBuffer(block.src)
-                    : await fetchImageBuffer(block.src);
-                if (imgBuffer) {
-                    const imgOptions = computeImageOptions(block.styles, pageWidth, pageHeight);
-                    doc.image(imgBuffer, imgOptions);
-                } else {
-                    doc.text('[圖片無法取得]');
-                }
-                doc.moveDown(0.5);
-            }
-        }
-
-        const needsSignature = hasSignature && i < parts.length - 1;
-        if (needsSignature) {
-            doc.moveDown(0.5);
-            if (sigBuffer) {
-                doc.image(sigBuffer, { fit: [pageWidth * 0.6, 200], align: 'left' });
-            } else {
-                doc.text('[簽名圖片無法取得]');
-            }
-            doc.moveDown(0.5);
-        }
-    }
-};
-
-const getContractEncryptionOptions = (contract) => {
-    // 預設密碼為簽署連結 Token 的後 6 碼，若無則使用 ID
-    let passwordSource = contract.signing_token || contract.id || '000000';
-    let password = String(passwordSource).slice(-6);
-
-    return {
-        userPassword: password,
-        ownerPassword: password,
-        permissions: {
-            printing: 'highResolution',
-            modifying: false,
-            copying: false,
-        }
+    const drawText = (text, y) => {
+        page.drawText(text, { x: 50, y, size: fontSize, font, color: rgb(0, 0, 0) });
     };
-};
 
-const streamContractPdf = async (res, contract) => {
-    const options = {
-        margin: 50,
-        ...getContractEncryptionOptions(contract),
+    let y = height - 50;
+
+    // Header
+    page.drawText('Audit Log / Certificate of Completion', { x: 50, y, size: 18, font, color: rgb(0, 0, 0) });
+    y -= 40;
+
+    drawText(`Document UUID: ${auditInfo.uuid}`, y);
+    y -= 20;
+    drawText(`Signed By: ${auditInfo.signerName}`, y);
+    y -= 20;
+    drawText(`Sign Timestamp: ${auditInfo.timestamp}`, y);
+    y -= 20;
+    drawText(`IP Address: ${auditInfo.ip}`, y);
+    y -= 20;
+    drawText(`Verification Code: ${auditInfo.verificationCode || 'N/A'}`, y);
+
+    // Footer
+    page.drawText('Generated by Jollify System', { x: 50, y: 30, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
+
+    const pdfBytes = await pdfDoc.save();
+    return Buffer.from(pdfBytes);
+}
+
+/**
+ * Digitally Sign PDF (Lock)
+ * @param {Buffer} pdfBuffer 
+ * @returns {Promise<Buffer>}
+ */
+async function digitallySignPdf(pdfBuffer) {
+    if (!fs.existsSync(CERT_PATH)) {
+        console.warn('⚠️ No certificate found at ' + CERT_PATH + '. Skipping digital signature.');
+        return pdfBuffer;
+    }
+
+    const p12Buffer = fs.readFileSync(CERT_PATH);
+
+    // 1. Add Placeholder
+    // Note: plainAddPlaceholder might return a Buffer or require specific handling
+    // It appends a signature placeholder.
+    const pdfWithPlaceholder = plainAddPlaceholder({
+        pdfBuffer,
+        reason: 'Contract Signed',
+        location: 'Taipei, Taiwan',
+        name: 'Jollify System',
+        contactInfo: 'admin@jollify.com.tw',
+    });
+
+    // 2. Sign
+    const signedPdf = signer.sign(pdfWithPlaceholder, p12Buffer, { passphrase: CERT_PASSWORD });
+
+    return signedPdf;
+}
+
+// Additional helpers for Controller integration
+const { renderTemplateWithVariables } = require('../utils/templateUtils');
+const fileModel = require('../models/fileModel');
+
+/**
+ * Generate full contract PDF (Generate -> Sign -> Audit -> Lock)
+ * @param {object} contract 
+ * @param {string} signatureBase64 
+ * @param {object} auditInfo 
+ * @returns {Promise<Buffer>}
+ */
+async function generateContractPdfBuffer(contract, signatureBase64, auditInfo) {
+    console.log('DEBUG: Rendering HTML for PDF...');
+    let variables = contract.template_variables;
+    if (typeof variables === 'string') {
+        try {
+            variables = JSON.parse(variables);
+        } catch (e) {
+            console.error('Failed to parse template_variables in PDF service:', e);
+            variables = [];
+        }
+    }
+    const html = renderTemplateWithVariables(contract.template_content, contract.variable_values, variables, {
+        wrapBold: true,
+        // no signatureImage here because we flatten it manually
+    });
+    console.log('DEBUG: HTML Rendered. Length:', html.length);
+
+    console.log('DEBUG: Calling generatePdfFromHtml...');
+    let pdf = await generatePdfFromHtml(html);
+    console.log('DEBUG: PDF Base generated. Size:', pdf.length);
+
+    // Merge with Base PDF if exists
+    if (contract.template_base_pdf_id) {
+        console.log('DEBUG: Base PDF detected. Merging...');
+        try {
+            const basePdfFile = await fileModel.getFile(contract.template_base_pdf_id);
+            if (basePdfFile && basePdfFile.data) {
+                const mainPdfDoc = await PDFDocument.load(basePdfFile.data);
+                const htmlPdfDoc = await PDFDocument.load(pdf);
+
+                // Copy pages from HTML PDF to Main PDF (Append mode)
+                const htmlPages = await mainPdfDoc.copyPages(htmlPdfDoc, htmlPdfDoc.getPageIndices());
+                htmlPages.forEach(page => mainPdfDoc.addPage(page));
+
+                const mergedBytes = await mainPdfDoc.save();
+                pdf = Buffer.from(mergedBytes);
+                console.log('DEBUG: Merged PDF success. New Size:', pdf.length);
+            }
+        } catch (mergeError) {
+            console.error('Failed to merge with base PDF:', mergeError);
+            // Continue with only HTML PDF if merge fails
+        }
+    }
+
+    if (signatureBase64) {
+        console.log('DEBUG: Adding signature to PDF...');
+        pdf = await addSignatureAndFlatten(pdf, signatureBase64);
+    }
+    if (auditInfo) {
+        console.log('DEBUG: Adding audit page...');
+        pdf = await addAuditPage(pdf, auditInfo);
+    }
+    pdf = await digitallySignPdf(pdf);
+    return pdf;
+}
+
+/**
+ * Stream PDF to response
+ * @param {object} res 
+ * @param {object} contract 
+ */
+async function streamContractPdf(res, contract) {
+    if (contract.signature_file_id) {
+        const file = await fileModel.getFile(contract.signature_file_id);
+        if (file) {
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="contract-${contract.contract_number || contract.id}.pdf"`);
+            return res.send(file.data); // Assuming data is Buffer (BYTEA)
+        }
+    }
+    // Fallback: Generate if not stored (Legacy or error)
+    // Note: Use stored signature image if available
+    const auditInfo = {
+        uuid: contract.signing_link_token || String(contract.id),
+        timestamp: new Date().toISOString(),
+        ip: 'N/A',
+        signerName: contract.client_name,
+        verificationCode: contract.verification_code_plaintext
     };
-    const doc = new PDFDocument(options);
+    const pdf = await generateContractPdfBuffer(contract, contract.signature_image, auditInfo);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="contract-${contract.id}.pdf"`);
-    doc.pipe(res);
-    await applyContractPdfContent(doc, contract);
-    doc.end();
-};
-
-const generateContractPdfBuffer = (contract) => {
-    return new Promise(async (resolve, reject) => {
-        const options = {
-            margin: 50,
-            ...getContractEncryptionOptions(contract),
-        };
-        const doc = new PDFDocument(options);
-        const chunks = [];
-
-        doc.on('data', chunk => chunks.push(chunk));
-        doc.on('error', reject);
-        doc.on('end', () => resolve(Buffer.concat(chunks)));
-
-        try {
-            await applyContractPdfContent(doc, contract);
-            doc.end();
-        } catch (err) {
-            reject(err);
-        }
-    });
-};
+    res.setHeader('Content-Disposition', `attachment; filename="contract-${contract.contract_number || contract.id}.pdf"`);
+    res.send(pdf);
+}
 
 module.exports = {
-    streamContractPdf,
+    generatePdfFromHtml,
+    addSignatureAndFlatten,
+    addAuditPage,
+    digitallySignPdf,
     generateContractPdfBuffer,
-    applyContractPdfContent,
+    streamContractPdf
 };

@@ -1,62 +1,71 @@
 <%- include('partials/header') %>
 
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <a href="/admin" class="btn btn-outline-secondary">返回管理首頁</a>
-            <h1 class="mb-0">合約範本管理</h1>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <a href="/admin" class="btn btn-outline-secondary">返回管理首頁</a>
+                <h1 class="mb-0">合約範本管理</h1>
+            </div>
+            <a href="/admin/templates/new" class="btn btn-primary">建立新範本</a>
         </div>
-        <a href="/admin/templates/new" class="btn btn-primary">建立新範本</a>
-    </div>
 
-    <div class="alert alert-info">建議先在 Word/Google 文件撰寫內容後貼上，並用 <code>{{變數鍵值}}</code> 保留需要替換的位置。</div>
+        <div class="alert alert-info">建議先在 Word/Google 文件撰寫內容後貼上，並用 <code>{{變數鍵值}}</code> 保留需要替換的位置。</div>
 
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <h5 class="card-title">現有範本</h5>
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th scope="col">#</th>
-                        <th scope="col">合約屬性</th>
-                        <th scope="col">狀態</th>
-                        <th scope="col">操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% if (templates && templates.length > 0) { %>
-                        <% templates.forEach((template, index) => { %>
-                            <tr>
-                                <th scope="row"><%= index + 1 %></th>
-                                <td><%= template.name %></td>
-                                <td>
-                                    <% if (template.is_active) { %>
-                                      <span class="badge bg-success">啟用</span>
-                                    <% } else { %>
-                                      <span class="badge bg-secondary">停用</span>
-                                    <% } %>
-                                </td>
-                                <td>
-                                    <a href="/admin/templates/edit/<%= template.id %>" class="btn btn-sm btn-outline-secondary">編輯</a>
-                                    <form action="/admin/templates/<%= template.id %>/toggle" method="POST" class="d-inline">
-                                      <% if (template.is_active) { %>
-                                        <button type="submit" class="btn btn-sm btn-outline-danger">停用</button>
-                                      <% } else { %>
-                                        <button type="submit" class="btn btn-sm btn-outline-success">啟用</button>
-                                      <% } %>
-                                    </form>
-                                </td>
-                            </tr>
-                        <% }); %>
-                    <% } else { %>
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">現有範本</h5>
+                <table class="table table-hover">
+                    <thead>
                         <tr>
-                            <td colspan="3" class="text-center">尚未建立任何範本。</td>
+                            <th scope="col">#</th>
+                            <th scope="col">代碼</th>
+                            <th scope="col">合約屬性</th>
+                            <th scope="col">狀態</th>
+                            <th scope="col">操作</th>
                         </tr>
-                    <% } %>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        <% if (templates && templates.length> 0) { %>
+                            <% templates.forEach((template, index)=> { %>
+                                <tr>
+                                    <th scope="row">
+                                        <%= index + 1 %>
+                                    </th>
+                                    <td><code><%= template.code || '-' %></code></td>
+                                    <td>
+                                        <%= template.name %>
+                                    </td>
+                                    <td>
+                                        <% if (template.is_active) { %>
+                                            <span class="badge bg-success">啟用</span>
+                                            <% } else { %>
+                                                <span class="badge bg-secondary">停用</span>
+                                                <% } %>
+                                    </td>
+                                    <td>
+                                        <a href="/admin/templates/edit/<%= template.id %>"
+                                            class="btn btn-sm btn-outline-secondary">編輯</a>
+                                        <form action="/admin/templates/<%= template.id %>/toggle" method="POST"
+                                            class="d-inline">
+                                            <% if (template.is_active) { %>
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">停用</button>
+                                                <% } else { %>
+                                                    <button type="submit"
+                                                        class="btn btn-sm btn-outline-success">啟用</button>
+                                                    <% } %>
+                                        </form>
+                                    </td>
+                                </tr>
+                                <% }); %>
+                                    <% } else { %>
+                                        <tr>
+                                            <td colspan="3" class="text-center">尚未建立任何範本。</td>
+                                        </tr>
+                                        <% } %>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-</div>
 
-<%- include('partials/footer') %>
+    <%- include('partials/footer') %>

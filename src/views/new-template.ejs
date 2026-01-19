@@ -11,10 +11,17 @@
 
         <div class="card shadow-sm">
             <div class="card-body">
-                <form action="/admin/templates/new" method="POST">
+                <form action="/admin/templates/new" method="POST" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label for="name" class="form-label">合約屬性</label>
+                        <label for="name" class="form-label">合約屬性 (名稱)</label>
                         <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="code" class="form-label">合約代碼 (4碼)</label>
+                        <input type="text" class="form-control" id="code" name="code" maxlength="4" required
+                            placeholder="例如: A001">
+                        <div class="form-text text-danger">注意：合約代碼新增後不能修改，將用於生成合約編號 (例: A001+2024+0001)。</div>
                     </div>
 
                     <div class="mb-3">
@@ -22,6 +29,13 @@
                         <input type="url" class="form-control" id="logo_url" name="logo_url"
                             placeholder="https://example.com/logo.png">
                         <div class="form-text">簽署頁與預覽會顯示於合約內容上方，可使用對外可存取的圖片網址。</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="base_pdf" class="form-label">底圖 PDF 檔案（選填）</label>
+                        <input type="file" class="form-control" id="base_pdf" name="base_pdf" accept=".pdf">
+                        <div class="form-text text-primary"><i class="bi bi-info-circle"></i> 若上傳 PDF，系統產正式合約時將以此 PDF
+                            為底圖進行渲染。</div>
                     </div>
 
                     <div class="form-check mb-3">

@@ -76,8 +76,8 @@ const downloadSignedPdf = async (req, res) => {
         if (!contract) {
             return res.status(404).send('簽署連結無效');
         }
-        if (contract.status !== 'SIGNED') {
-            return res.status(400).send('合約尚未簽署，無法下載 PDF');
+        if (contract.status !== 'SIGNED' && contract.status !== 'PENDING_SIGNATURE') {
+            return res.status(400).send('目前狀態無法預覽 PDF');
         }
         await streamContractPdf(res, contract);
     } catch (error) {
@@ -260,65 +260,77 @@ const submitSignature = async (req, res) => {
         const finalVariables = { ...existingVariables, ...customerVariables };
         const normalizedFinalVariables = normalizeVariableValues(finalVariables, contract.template_variables);
 
-        // Re-architecture: Save signature to storage_files
-        let signatureFileId = null;
-        if (signature_data && signature_data.startsWith('data:image')) {
-            try {
-                const matches = signature_data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-                if (matches && matches.length === 3) {
-                    const mimeType = matches[1];
-                    const buffer = Buffer.from(matches[2], 'base64');
-                    signatureFileId = crypto.randomUUID();
+        // Generate Full PDF Workflow
+        const auditInfo = {
+            ip: req.ip,
+            timestamp: new Date().toISOString(),
+            uuid: contract.signing_link_token,
+            signerName: contract.client_name,
+            verificationCode: contract.verification_code_plaintext
+        };
 
-                    await fileModel.saveFile({
-                        id: signatureFileId,
-                        mime_type: mimeType,
-                        data: buffer,
-                        size: buffer.length
-                    });
-                }
-            } catch (err) {
-                console.error('Failed to save signature file:', err);
-            }
+        const { generateContractPdfBuffer } = require('../services/pdfService'); // Ensure import
+
+        // Generate PDF
+        console.log('DEBUG: Starting PDF generation...');
+        let pdfBuffer;
+        try {
+            pdfBuffer = await generateContractPdfBuffer({
+                ...contract,
+                variable_values: normalizedFinalVariables
+            }, signature_data, auditInfo);
+        } catch (genError) {
+            console.error('PDF Generation failed:', genError);
+            throw new Error('PDF Generation Failed');
         }
+        console.log('DEBUG: PDF generation success. Size:', pdfBuffer.length);
 
+        // Save PDF to Storage
+        console.log('DEBUG: Saving PDF to storage...');
+        const signatureFileId = crypto.randomUUID();
+        await fileModel.saveFile({
+            id: signatureFileId,
+            mime_type: 'application/pdf',
+            data: pdfBuffer,
+            size: pdfBuffer.length
+        });
+        console.log('DEBUG: PDF saved to storage. File ID:', signatureFileId);
+
+        // Update Contract
+        console.log('DEBUG: Updating contract status to SIGNED...');
+        // We use markAsSigned but it expects signatureFileId (which IS the PDF now)
+        // and signatureImage (legacy). We pass base64 signature for legacy image column just in case.
         const updated = await contractModel.markAsSigned(
             contract.id,
             signatureFileId,
             normalizedFinalVariables,
-            signature_data
+            signature_data // Legacy image storage
         );
+        console.log('DEBUG: Contract updated successfully.');
+
         const signedContract = { ...contract, ...updated };
 
         // Security Audit Log
         auditLogModel.log({
-            user_id: null, // Public user (client)
+            user_id: null,
             action: 'SIGN_CONTRACT',
             resource_id: String(contract.id),
             details: {
                 clientName: contract.client_name,
+                fileId: signatureFileId
             },
             ip_address: req.ip,
             user_agent: req.get('User-Agent')
         });
 
-        // Attempt to upload to Google Drive if configured
-        // Note: We need dynamic import of driveService or just usage?
-        // driveService.uploadSignedPdfToDrive requires contract and PDF buffer.
-        // Ideally we should do this asynchronously or in background.
-        // For now we import it.
-
-        // Wait, I need driveService imported.
-        const { uploadSignedPdfToDrive } = require('../services/driveService');
-        const { generateContractPdfBuffer } = require('../services/pdfService');
-
-        // Generate PDF for Drive
-        // Ideally this heavy lifting should be offloaded, but keeping existing behavior
+        // Google Drive Backup
         try {
-            const pdfBuffer = await generateContractPdfBuffer(signedContract);
+            const { uploadSignedPdfToDrive } = require('../services/driveService');
+            // Check if drive service is actually enabled/configured inside the service
+            // We pass the signed contract and the PDF buffer we just generated
             await uploadSignedPdfToDrive(signedContract, pdfBuffer);
-        } catch (e) {
-            console.error('Error in post-sign drive upload:', e);
+        } catch (driveError) {
+            console.error('Google Drive backup failed (non-blocking):', driveError);
         }
 
         res.render('success', { title: '簽署完成' });

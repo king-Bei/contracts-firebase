@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const { normalizeVariableValues, renderTemplateWithVariables } = require('../utils/templateUtils');
 
 const salesDashboard = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
     try {
@@ -68,7 +68,7 @@ const newContractPage = async (req, res) => {
 };
 
 const changePasswordPage = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
 
@@ -83,7 +83,7 @@ const changePasswordPage = async (req, res) => {
 };
 
 const updatePassword = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
 
@@ -127,7 +127,7 @@ const updatePassword = async (req, res) => {
 };
 
 const bulkContractPage = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
 
@@ -149,7 +149,7 @@ const bulkContractPage = async (req, res) => {
 };
 
 const createBulkContracts = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
 
@@ -259,7 +259,7 @@ const createContract = async (req, res) => {
 };
 
 const viewContract = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
     try {
@@ -304,7 +304,7 @@ const viewContract = async (req, res) => {
 };
 
 const editContractPage = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
 
@@ -346,7 +346,7 @@ const editContractPage = async (req, res) => {
 };
 
 const updateContract = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
 
@@ -401,7 +401,7 @@ const updateContract = async (req, res) => {
 };
 
 const cancelContract = async (req, res) => {
-    if (req.session.user.role !== 'salesperson') {
+    if (!req.session.user.is_sales && req.session.user.role !== 'admin') {
         return res.status(403).send('權限不足');
     }
 

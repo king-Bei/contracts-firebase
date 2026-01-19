@@ -11,11 +11,18 @@
 
         <div class="card shadow-sm">
             <div class="card-body">
-                <form action="/admin/templates/edit/<%= template.id %>" method="POST">
+                <form action="/admin/templates/edit/<%= template.id %>" method="POST" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label for="name" class="form-label">合約屬性</label>
+                        <label for="name" class="form-label">合約屬性 (名稱)</label>
                         <input type="text" class="form-control" id="name" name="name" value="<%= template.name %>"
                             required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="code" class="form-label">合約代碼</label>
+                        <input type="text" class="form-control" id="code" value="<%= template.code || 'N/A' %>"
+                            disabled>
+                        <div class="form-text">合約代碼無法修改。</div>
                     </div>
 
                     <div class="mb-3">
@@ -23,6 +30,18 @@
                         <input type="url" class="form-control" id="logo_url" name="logo_url"
                             value="<%= template.logo_url || '' %>" placeholder="https://example.com/logo.png">
                         <div class="form-text">設定後會顯示於合約預覽與簽署頁面頂部。</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="base_pdf" class="form-label">底圖 PDF 檔案（選填）</label>
+                        <input type="file" class="form-control" id="base_pdf" name="base_pdf" accept=".pdf">
+                        <% if (template.base_pdf_id) { %>
+                            <div class="form-text text-success"><i class="bi bi-check-circle"></i> 目前已有上傳底圖
+                                PDF。重新上傳將會覆蓋舊檔。</div>
+                            <% } else { %>
+                                <div class="form-text text-primary"><i class="bi bi-info-circle"></i> 若上傳
+                                    PDF，系統產正式合約時將以此 PDF 為底圖進行渲染。</div>
+                                <% } %>
                     </div>
 
                     <div class="mb-3">

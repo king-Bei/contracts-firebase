@@ -19,15 +19,30 @@ const newTemplatePage = async (req, res) => {
 
 const createTemplate = async (req, res) => {
     try {
-        const { name, content } = req.body;
+        const { name, content, code } = req.body;
         const variables = req.body.variables ? JSON.parse(req.body.variables) : [];
+
+        let base_pdf_id = null;
+        if (req.file) {
+            const crypto = require('crypto');
+            const fileModel = require('../models/fileModel');
+            base_pdf_id = crypto.randomUUID();
+            await fileModel.saveFile({
+                id: base_pdf_id,
+                mime_type: 'application/pdf',
+                data: req.file.buffer,
+                size: req.file.size
+            });
+        }
 
         await contractTemplateModel.create({
             name,
+            code: code?.trim(),
             content,
             variables,
             logo_url: req.body.logo_url?.trim() || null,
-            requires_approval: req.body.requires_approval === 'on'
+            requires_approval: req.body.requires_approval === 'on',
+            base_pdf_id
         });
         res.redirect('/admin/templates');
     } catch (error) {
@@ -63,13 +78,27 @@ const updateTemplate = async (req, res) => {
 
         const variables = req.body.variables ? JSON.parse(req.body.variables) : [];
 
+        let base_pdf_id = template.base_pdf_id;
+        if (req.file) {
+            const crypto = require('crypto');
+            const fileModel = require('../models/fileModel');
+            base_pdf_id = crypto.randomUUID();
+            await fileModel.saveFile({
+                id: base_pdf_id,
+                mime_type: 'application/pdf',
+                data: req.file.buffer,
+                size: req.file.size
+            });
+        }
+
         await contractTemplateModel.update(req.params.id, {
             name: req.body.name,
             content: req.body.content,
             variables,
             is_active: req.body.is_active === 'on',
             logo_url: req.body.logo_url?.trim() || null,
-            requires_approval: req.body.requires_approval === 'on'
+            requires_approval: req.body.requires_approval === 'on',
+            base_pdf_id
         });
 
         res.redirect('/admin/templates');

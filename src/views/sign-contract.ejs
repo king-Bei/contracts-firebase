@@ -123,21 +123,20 @@
 
                       <div class="card shadow-sm mb-4 anim-fade-up" id="contract-preview-card">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                          <strong>合約內容</strong>
-                          <button type="button" class="btn btn-sm btn-outline-secondary" id="print-preview">列印</button>
+                          <strong>合約內容預覽</strong>
+                          <div class="btn-group">
+                            <a href="/contracts/sign/<%= signingToken %>/pdf" target="_blank"
+                              class="btn btn-sm btn-outline-primary">
+                              <i class="bi bi-file-earmark-pdf"></i> 檢視正式 PDF
+                            </a>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="print-preview">
+                              <i class="bi bi-printer"></i> 列印
+                            </button>
+                          </div>
                         </div>
-                        <div class="card-body" id="contract-preview-wrapper">
-                          <% if (contract.template_logo_url) { %>
-                            <div class="text-center mb-4">
-                              <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid"
-                                style="max-height: 80px;">
-                            </div>
-                            <% } %>
-
-                              <div class="border rounded p-3 bg-light contract-content-render"
-                                style="max-height: 520px; overflow: auto;">
-                                <%- previewContent %>
-                              </div>
+                        <div class="card-body p-4 p-md-5 bg-white shadow-sm contract-content-render"
+                          style="max-height: 600px; overflow: auto; white-space: pre-wrap; font-family: serif; line-height: 1.6;">
+                          <%- previewContent %>
                         </div>
                       </div>
 
@@ -147,8 +146,8 @@
                           <div class="form-check mb-3">
                             <input class="form-check-input" type="checkbox" value="on" id="agree_terms"
                               name="agree_terms" required>
-                            <label class="form-check-label" for="agree_terms">我已閱讀並同意<a href="/privacy" target="_blank"
-                                rel="noopener" class="ms-1">個資保護條款</a></label>
+                            <label class="form-check-label" for="agree_terms">我已閱讀並同意<a href="#" data-bs-toggle="modal"
+                                data-bs-target="#privacyModal" class="ms-1">個資保護條款</a></label>
                           </div>
 
                           <div class="mb-3">
@@ -172,164 +171,219 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                       <strong>合約內容</strong>
                       <div class="d-flex gap-2">
-                        <% if (contract.status==='SIGNED' ) { %>
-                          <a class="btn btn-sm btn-outline-primary" href="/contracts/sign/<%= signingToken %>/pdf"
-                            target="_blank" rel="noopener">下載 PDF</a>
-                          <% } %>
-                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                              id="print-preview">列印</button>
+                        <a class="btn btn-sm btn-outline-primary" href="/contracts/sign/<%= signingToken %>/pdf"
+                          target="_blank" rel="noopener">
+                          <i class="bi bi-file-earmark-pdf"></i> 下載 PDF
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="print-preview">
+                          <i class="bi bi-printer"></i> 列印
+                        </button>
                       </div>
                     </div>
-                    <div class="card-body" id="contract-preview-wrapper">
-                      <% if (contract.template_logo_url) { %>
-                        <div class="text-center mb-4">
-                          <img src="<%= contract.template_logo_url %>" alt="公司 LOGO" class="img-fluid"
-                            style="max-height: 80px;">
-                        </div>
-                        <% } %>
-
-                          <div class="border rounded p-3 bg-light" style="max-height: 520px; overflow: auto;">
-                            <%- previewContent %>
-                          </div>
-
-                          <% if (contract.signature_image) { %>
-                            <div class="border rounded p-3 bg-white mt-3">
-                              <div class="fw-bold mb-2">簽署圖片</div>
-                              <img src="<%= contract.signature_image %>" alt="客戶簽名" class="img-fluid border rounded"
-                                style="max-height: 220px;">
-                            </div>
-                            <% } %>
+                    <div class="card-body p-4 p-md-5 bg-white shadow-sm"
+                      style="max-height: 600px; overflow: auto; white-space: pre-wrap; font-family: serif; line-height: 1.6;">
+                      <%- previewContent %>
                     </div>
-                  </div>
-                  <% } %>
-                    <% } else { %>
-                      <div class="alert alert-light border">驗證成功後會立即顯示合約內容與簽署區域。</div>
+
+                    <% if (contract.signature_image) { %>
+                      <div class="border rounded p-3 bg-white mt-3">
+                        <div class="fw-bold mb-2">簽署圖片</div>
+                        <img src="<%= contract.signature_image %>" alt="客戶簽名" class="img-fluid border rounded"
+                          style="max-height: 220px;">
+                      </div>
                       <% } %>
+                  </div>
   </div>
+  <% } %>
+    <% } else { %>
+      <div class="alert alert-light border">驗證成功後會立即顯示合約內容與簽署區域。</div>
+      <% } %>
+        </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
-  <script>
-    const canvas = document.getElementById('signature-pad');
-    const clearBtn = document.getElementById('clear-signature');
-    const hiddenInput = document.getElementById('signature_data');
-    let signaturePad = null;
+        <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
+        <script>
+          const canvas = document.getElementById('signature-pad');
+          const clearBtn = document.getElementById('clear-signature');
+          const hiddenInput = document.getElementById('signature_data');
+          let signaturePad = null;
 
-    if (canvas) {
-      signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
+          if (canvas) {
+            signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
 
-      const resizeCanvas = () => {
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        canvas.getContext('2d').scale(ratio, ratio);
-        signaturePad.clear();
-      };
-      window.addEventListener('resize', resizeCanvas);
-      resizeCanvas();
+            const resizeCanvas = () => {
+              const ratio = Math.max(window.devicePixelRatio || 1, 1);
+              canvas.width = canvas.offsetWidth * ratio;
+              canvas.height = canvas.offsetHeight * ratio;
+              canvas.getContext('2d').scale(ratio, ratio);
+              signaturePad.clear();
+            };
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
 
-      clearBtn.addEventListener('click', () => signaturePad.clear());
-    }
-
-    function handleSubmit() {
-      if (!signaturePad) {
-        console.error('SignaturePad not initialized');
-        alert('簽名板未正確載入，請確認網路連線正常並重新整理頁面。');
-        return false;
-      }
-      if (signaturePad.isEmpty()) {
-        alert('請先簽名再送出。');
-        return false;
-      }
-      hiddenInput.value = signaturePad.toDataURL();
-      return true;
-    }
-
-    const printBtn = document.getElementById('print-contract');
-    const printPreviewBtn = document.getElementById('print-preview');
-    if (printBtn) {
-      printBtn.addEventListener('click', () => window.print());
-    }
-    if (printPreviewBtn) {
-      printPreviewBtn.addEventListener('click', () => window.print());
-    }
-
-
-    function previewImage(input, key) {
-      if (input.files && input.files[0]) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          const img = document.getElementById(`preview_img_${key}`);
-          if (img) {
-            img.src = e.target.result;
-            img.style.display = 'inline-block';
+            clearBtn.addEventListener('click', () => signaturePad.clear());
           }
-        }
-        reader.readAsDataURL(input.files[0]);
-      }
-    }
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script>
-    function prepareClone(element) {
-      const clone = element.cloneNode(true);
-      clone.style.maxHeight = 'none';
-      clone.style.overflow = 'visible';
-      clone.style.position = 'absolute';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      clone.style.width = `${element.scrollWidth || element.offsetWidth}px`;
-      clone.style.height = `${element.scrollHeight || element.offsetHeight}px`;
-      const scrollable = clone.querySelector('.border');
-      if (scrollable) {
-        scrollable.style.maxHeight = 'none';
-        scrollable.style.overflow = 'visible';
-        scrollable.style.height = 'auto';
-        scrollable.style.width = `${scrollable.scrollWidth || scrollable.offsetWidth}px`;
-      }
-      document.body.appendChild(clone);
-      return clone;
-    }
 
-    async function downloadPdf(elementId, filename) {
-      const wrapper = document.getElementById(elementId);
-      if (!wrapper) return;
-      const scrollable = wrapper.querySelector('.border') || wrapper;
-      const clone = prepareClone(scrollable);
-      const canvas = await html2canvas(clone, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        scrollY: -window.scrollY,
-      });
-      clone.remove();
-      const imgData = canvas.toDataURL('image/png');
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF('p', 'pt', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgProps = pdf.getImageProperties(imgData);
-      const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
-      const imgWidth = imgProps.width * ratio;
-      const imgHeight = imgProps.height * ratio;
+          function handleSubmit() {
+            if (!signaturePad) {
+              console.error('SignaturePad not initialized');
+              alert('簽名板未正確載入，請確認網路連線正常並重新整理頁面。');
+              return false;
+            }
+            if (signaturePad.isEmpty()) {
+              alert('請先簽名再送出。');
+              return false;
+            }
+            hiddenInput.value = signaturePad.toDataURL();
+            return true;
+          }
 
-      let heightLeft = imgHeight;
-      let position = 0;
+          const printBtn = document.getElementById('print-contract');
+          const printPreviewBtn = document.getElementById('print-preview');
+          if (printBtn) {
+            printBtn.addEventListener('click', () => window.print());
+          }
+          if (printPreviewBtn) {
+            printPreviewBtn.addEventListener('click', () => window.print());
+          }
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
 
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
+          function previewImage(input, key) {
+            if (input.files && input.files[0]) {
+              const reader = new FileReader();
+              reader.onload = function (e) {
+                const img = document.getElementById(`preview_img_${key}`);
+                if (img) {
+                  img.src = e.target.result;
+                  img.style.display = 'inline-block';
+                }
+              }
+              reader.readAsDataURL(input.files[0]);
+            }
+          }
 
-      pdf.save(filename);
-    }
+          // Real-time preview update for text/textarea inputs
+          document.querySelectorAll('[name^="customer_variables"]').forEach(input => {
+            input.addEventListener('input', (e) => {
+              const nameAttr = e.target.getAttribute('name');
+              if (!nameAttr) return;
+              const match = nameAttr.match(/\[(.*?)\]/);
+              if (!match) return;
+              const key = match[1];
+              const previewElement = document.getElementById(`preview_text_${key}`);
+              if (previewElement) {
+                previewElement.textContent = e.target.value || '      ';
+              }
+            });
+          });
+        </script>
+        <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+        <script>
+          function prepareClone(element) {
+            const clone = element.cloneNode(true);
+            clone.style.maxHeight = 'none';
+            clone.style.overflow = 'visible';
+            clone.style.position = 'absolute';
+            clone.style.left = '-9999px';
+            clone.style.top = '0';
+            clone.style.width = `${element.scrollWidth || element.offsetWidth}px`;
+            clone.style.height = `${element.scrollHeight || element.offsetHeight}px`;
+            const scrollable = clone.querySelector('.border');
+            if (scrollable) {
+              scrollable.style.maxHeight = 'none';
+              scrollable.style.overflow = 'visible';
+              scrollable.style.height = 'auto';
+              scrollable.style.width = `${scrollable.scrollWidth || scrollable.offsetWidth}px`;
+            }
+            document.body.appendChild(clone);
+            return clone;
+          }
 
-    const pdfButtons = document.querySelectorAll('#download-pdf, #download-pdf-top');
-    pdfButtons.forEach(btn => btn?.addEventListener('click', () => downloadPdf('contract-preview-card', `contract-${'<%= contract.id %>'}.pdf`)));
-  </script>
-  <%- include('partials/footer') %>
+          async function downloadPdf(elementId, filename) {
+            const wrapper = document.getElementById(elementId);
+            if (!wrapper) return;
+            const scrollable = wrapper.querySelector('.border') || wrapper;
+            const clone = prepareClone(scrollable);
+            const canvas = await html2canvas(clone, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: '#ffffff',
+              scrollY: -window.scrollY,
+            });
+            clone.remove();
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'pt', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const imgProps = pdf.getImageProperties(imgData);
+            const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
+            const imgWidth = imgProps.width * ratio;
+            const imgHeight = imgProps.height * ratio;
+
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+
+            while (heightLeft > 0) {
+              position = heightLeft - imgHeight;
+              pdf.addPage();
+              pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+              heightLeft -= pageHeight;
+            }
+
+            pdf.save(filename);
+          }
+
+          const pdfButtons = document.querySelectorAll('#download-pdf, #download-pdf-top');
+          pdfButtons.forEach(btn => btn?.addEventListener('click', () => downloadPdf('contract-preview-card', `contract-${'<%= contract.id %>'}.pdf`)));
+        </script>
+        <!-- Privacy Modal -->
+        <div class="modal fade" id="privacyModal" tabindex="-1" aria-labelledby="privacyModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content shadow">
+              <div class="modal-header bg-light">
+                <h5 class="modal-title" id="privacyModalLabel"><i class="bi bi-shield-check me-2"></i>個資保護條款</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body p-4">
+                <section class="mb-3">
+                  <h6 class="fw-bold text-primary">一、個資蒐集目的</h6>
+                  <p class="small text-muted">本公司蒐集您的個人資料，目的在於進行合約管理、身分驗證、客戶服務及履行合約義務。</p>
+                </section>
+
+                <section class="mb-3">
+                  <h6 class="fw-bold text-primary">二、蒐集之個人資料類別</h6>
+                  <p class="small text-muted">包括但不限於：姓名、身分證字號、聯絡電話、電子信箱、通訊地址及簽名等。</p>
+                </section>
+
+                <section class="mb-3">
+                  <h6 class="fw-bold text-primary">三、利用期間、地區、對象及方式</h6>
+                  <ul class="small text-muted ps-3">
+                    <li>期間：合約有效期間及法律規定之保存期限方式。</li>
+                    <li>地區：本公司經營業務之地區。</li>
+                    <li>對象：本公司、委外服務供應商及主管機關。</li>
+                    <li>方式：以數位或書面方式進行處理與利用。</li>
+                  </ul>
+                </section>
+
+                <section class="mb-3">
+                  <h6 class="fw-bold text-primary">四、您的權利</h6>
+                  <p class="small text-muted">依據個資法第三條規定，您可以行使查詢、閱覽、製給複製本、補充、更正、停止蒐集處理利用或刪除您的個人資料。</p>
+                </section>
+
+                <section>
+                  <h6 class="fw-bold text-primary">五、隱私權保護</h6>
+                  <p class="small text-muted mb-0">本系統符合資訊安全標準，並對您的個人簽署資料進行加密儲存，確保個人隱私不洩漏。</p>
+                </section>
+              </div>
+              <div class="modal-footer border-0">
+                <button type="button" class="btn btn-primary px-4" data-bs-dismiss="modal">我知道了</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <%- include('partials/footer') %>

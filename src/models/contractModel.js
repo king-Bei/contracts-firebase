@@ -168,6 +168,11 @@ async function countAllWithFilters({ salespersonId, startDate, endDate, status }
  * @param {object} contractData
  * @returns {object} The created contract, including the plaintext verification code
  */
+/**
+ * 建立一份新合約
+ * @param {object} contractData
+ * @returns {object} The created contract, including the plaintext verification code
+ */
 async function create(contractData) {
   const { salesperson_id, template_id, client_name, variable_values } = contractData;
 
@@ -177,22 +182,55 @@ async function create(contractData) {
   // 1b. Generate unique short link code for concise sharing
   const short_link_code = await generateUniqueShortCode();
 
+  // 1c. Generate Contract Number: [Code][YYYY][Sequence]
+  // Get Template Code
+  const templateRes = await db.query('SELECT code, requires_approval FROM contract_templates WHERE id = $1', [template_id]);
+  const template = templateRes.rows[0];
+
+  if (!template) {
+    throw new Error('Template not found');
+  }
+
+  const templateCode = template.code || 'UNKNOWN'; // Handle legacy/missing code
+  const year = new Date().getFullYear();
+
+  // Get next sequence for this template and year
+  // Pattern match: Like 'CODE2024%'
+  const likePattern = `${templateCode}${year}%`;
+
+  const seqRes = await db.query(`
+      SELECT contract_number FROM contracts 
+      WHERE contract_number LIKE $1 
+      ORDER BY contract_number DESC 
+      LIMIT 1
+  `, [likePattern]);
+
+  let nextSeq = 1;
+  if (seqRes.rows.length > 0) {
+    const lastNum = seqRes.rows[0].contract_number;
+    // Extract last 4 digits
+    const lastSeqStr = lastNum.slice(-4);
+    const lastSeqInt = parseInt(lastSeqStr, 10);
+    if (!isNaN(lastSeqInt)) {
+      nextSeq = lastSeqInt + 1;
+    }
+  }
+
+  const seqStr = String(nextSeq).padStart(4, '0');
+  const contract_number = `${templateCode}${year}${seqStr}`;
+
   // 2. Generate 6-digit verification code
   const verification_code = Math.floor(100000 + Math.random() * 900000).toString();
   const verification_code_hash = await bcrypt.hash(verification_code, 10); // Using bcrypt for hashing
 
-  // 2b. Check if template requires approval
-  const templateQuery = 'SELECT requires_approval FROM contract_templates WHERE id = $1';
-  const templateResult = await db.query(templateQuery, [template_id]);
-  const requiresApproval = templateResult.rows[0]?.requires_approval !== false; // Default true
-
+  const requiresApproval = template.requires_approval !== false; // Default true
   const initialStatus = requiresApproval ? 'PENDING_APPROVAL' : 'PENDING_SIGNATURE';
 
   // 3. Insert into database
   const queryText = `
     INSERT INTO contracts
-      (salesperson_id, template_id, client_name, variable_values, signing_link_token, short_link_code, verification_code_hash, verification_code_plaintext, status)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      (salesperson_id, template_id, client_name, variable_values, signing_link_token, short_link_code, verification_code_hash, verification_code_plaintext, status, contract_number)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *;
   `;
   const values = [
@@ -204,7 +242,8 @@ async function create(contractData) {
     short_link_code,
     verification_code_hash,
     verification_code, // Store plaintext code as requested by user
-    initialStatus
+    initialStatus,
+    contract_number
   ];
 
   const { rows } = await db.query(queryText, values);
@@ -235,7 +274,8 @@ async function findById(id) {
       ct.name as template_name,
       ct.content as template_content,
       ct.variables as template_variables,
-      ct.logo_url as template_logo_url
+      ct.logo_url as template_logo_url,
+      ct.base_pdf_id as template_base_pdf_id
     FROM contracts c
     JOIN contract_templates ct ON c.template_id = ct.id
     LEFT JOIN users u ON c.salesperson_id = u.id
@@ -260,13 +300,15 @@ async function findByToken(token) {
       c.verification_code_hash,
       c.verification_code_plaintext,
       c.short_link_code,
+      c.signing_link_token,
       c.signature_image,
       c.signature_file_id,
       c.signed_at,
       ct.name as template_name,
       ct.content as template_content,
       ct.logo_url as template_logo_url,
-      ct.variables as template_variables
+      ct.variables as template_variables,
+      ct.base_pdf_id as template_base_pdf_id
     FROM contracts c
     JOIN contract_templates ct ON c.template_id = ct.id
     WHERE c.signing_link_token = $1;
@@ -308,7 +350,9 @@ async function findBySalesperson(salespersonId, { startDate, endDate, status, li
       c.client_name,
       c.signed_at,
       c.created_at,
+      c.created_at,
       c.short_link_code,
+      c.signing_link_token,
       ct.name as template_name
     FROM contracts c
     LEFT JOIN contract_templates ct ON c.template_id = ct.id

@@ -1,52 +1,86 @@
 <%- include('../partials/header') %>
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <div>
-    <h1 class="h3 mb-1">編輯合約</h1>
-    <p class="text-muted mb-0">合約 ID：<%= contract.id %></p>
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">編輯合約</h1>
+      <p class="text-muted mb-0">合約 ID：<%= contract.id %>
+      </p>
+    </div>
+    <a href="/sales/contracts/<%= contract.id %>" class="btn btn-outline-secondary">返回詳情</a>
   </div>
-  <a href="/sales/contracts/<%= contract.id %>" class="btn btn-outline-secondary">返回詳情</a>
-</div>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <form action="/sales/contracts/<%= contract.id %>/edit" method="POST">
-      <div class="mb-3">
-        <label for="client_name" class="form-label">客戶姓名</label>
-        <input type="text" id="client_name" name="client_name" class="form-control" value="<%= contract.client_name || '' %>" required>
-      </div>
-
-      <% if (templateVariables && templateVariables.length > 0) { %>
-        <div class="border rounded p-3 mb-3 bg-light">
-          <h6 class="mb-3">合約變數</h6>
-          <% templateVariables.forEach(variable => {
-            const key = variable.key || variable.name;
-            const rawValue = (contract.variable_values || {})[key];
-            const type = (variable.type || 'text').toLowerCase();
-            const isChecked = rawValue === true || rawValue === 'true' || rawValue === 'on' || rawValue === '1' || rawValue === 1 || rawValue === '已勾選';
-          %>
-            <div class="<%= type === 'checkbox' ? 'form-check mb-3' : 'mb-3' %>">
-              <% if (type === 'checkbox') { %>
-                <input class="form-check-input" type="checkbox" id="var-<%= key %>" name="variables[<%= key %>]" value="on" <%= isChecked ? 'checked' : '' %>>
-                <label class="form-check-label" for="var-<%= key %>"><%= variable.label || variable.name %></label>
-              <% } else if (type === 'textarea') { %>
-                <label class="form-label" for="var-<%= key %>"><%= variable.label || variable.name %></label>
-                <textarea class="form-control" id="var-<%= key %>" name="variables[<%= key %>]" rows="3"><%= rawValue || '' %></textarea>
-              <% } else { %>
-                <label class="form-label" for="var-<%= key %>"><%= variable.label || variable.name %></label>
-                <input type="text" class="form-control" id="var-<%= key %>" name="variables[<%= key %>]" value="<%= rawValue || '' %>">
-              <% } %>
-            </div>
-          <% }) %>
-          <p class="text-muted small mb-0">變數將套入範本中的 <code>{{key}}</code> 位置。</p>
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form action="/sales/contracts/<%= contract.id %>/edit" method="POST">
+        <div class="mb-3">
+          <label for="client_name" class="form-label">客戶姓名</label>
+          <input type="text" id="client_name" name="client_name" class="form-control"
+            value="<%= contract.client_name || '' %>" required>
         </div>
-      <% } %>
 
-      <div class="d-flex justify-content-end gap-2">
-        <a href="/sales/contracts/<%= contract.id %>" class="btn btn-secondary">取消</a>
-        <button type="submit" class="btn btn-primary">儲存變更</button>
-      </div>
-    </form>
+        <% if (templateVariables && templateVariables.length> 0) { %>
+          <div class="border rounded p-4 mb-3 bg-light">
+            <h6 class="mb-3 border-bottom pb-2">合約變數</h6>
+            <div class="row g-3">
+              <% templateVariables.forEach(variable=> {
+                const key = variable.key || variable.name;
+                const rawValue = (contract.variable_values || {})[key];
+                const type = (variable.type || 'text').toLowerCase();
+                const isChecked = rawValue === true || rawValue === 'true' || rawValue === 'on' || rawValue === '1' ||
+                rawValue === 1 || rawValue === '已勾選';
+                const colClass = type === 'textarea' ? 'col-12' : 'col-md-4';
+                %>
+                <div class="<%= colClass %>">
+                  <div class="<%= type === 'checkbox' ? 'form-check mt-4' : '' %>">
+                    <% if (type==='checkbox' ) { %>
+                      <input class="form-check-input" type="checkbox" id="var-<%= key %>" name="variables[<%= key %>]"
+                        value="on" <%=isChecked ? 'checked' : '' %>>
+                      <label class="form-check-label" for="var-<%= key %>">
+                        <%= variable.label || variable.name %>
+                      </label>
+                      <% } else if (type==='textarea' ) { %>
+                        <label class="form-label" for="var-<%= key %>">
+                          <%= variable.label || variable.name %>
+                        </label>
+                        <textarea class="form-control" id="var-<%= key %>" name="variables[<%= key %>]"
+                          rows="3"><%= rawValue || '' %></textarea>
+                        <% } else if (type==='select' ) { %>
+                          <label class="form-label" for="var-<%= key %>">
+                            <%= variable.label || variable.name %>
+                          </label>
+                          <select class="form-select" id="var-<%= key %>" name="variables[<%= key %>]">
+                            <option value="">請選擇</option>
+                            <% (variable.options || []).forEach(opt=> { %>
+                              <option value="<%= opt %>" <%=rawValue===opt ? 'selected' : '' %>><%= opt %>
+                              </option>
+                              <% }) %>
+                          </select>
+                          <% } else if (type==='date' ) { %>
+                            <label class="form-label" for="var-<%= key %>">
+                              <%= variable.label || variable.name %>
+                            </label>
+                            <input type="date" class="form-control" id="var-<%= key %>" name="variables[<%= key %>]"
+                              value="<%= rawValue || '' %>">
+                            <% } else { %>
+                              <label class="form-label" for="var-<%= key %>">
+                                <%= variable.label || variable.name %>
+                              </label>
+                              <input type="<%= type === 'number' ? 'number' : 'text' %>" class="form-control"
+                                id="var-<%= key %>" name="variables[<%= key %>]" value="<%= rawValue || '' %>">
+                              <% } %>
+                  </div>
+                </div>
+                <% }) %>
+            </div>
+            <p class="text-muted small mt-3 mb-0">變數將套入範本中的 <code>{{key}}</code> 位置。</p>
+          </div>
+          <% } %>
+
+            <div class="d-flex justify-content-end gap-2">
+              <a href="/sales/contracts/<%= contract.id %>" class="btn btn-secondary">取消</a>
+              <button type="submit" class="btn btn-primary">儲存變更</button>
+            </div>
+      </form>
+    </div>
   </div>
-</div>
 
-<%- include('../partials/footer') %>
+  <%- include('../partials/footer') %>

@@ -6,10 +6,12 @@ const { renderTemplateWithVariables } = require('../utils/templateUtils');
 
 const dashboard = async (req, res) => {
     try {
+        console.log('Admin Dashboard: Start loading...');
         const currentUser = req.session.user;
         let users = [];
         // Only load users if permitted
         if (currentUser.can_manage_users) {
+            console.log('Admin Dashboard: Fetching users...');
             users = await userModel.findAll();
         } else {
             // If not allowed to manage users, maybe we don't load them or load only self? 
@@ -17,6 +19,8 @@ const dashboard = async (req, res) => {
         }
 
         const { salesperson_id, start_date, end_date, status, page, limit } = req.query;
+        const currentPage = page ? parseInt(page, 10) : 1;
+        const currentLimit = limit ? parseInt(limit, 10) : 10;
 
         let contracts = [];
         let pagination = null;
@@ -28,8 +32,6 @@ const dashboard = async (req, res) => {
             const parsedEnd = end_date ? new Date(end_date) : null;
             const normalizedStatus = status || 'ALL';
 
-            const currentPage = page ? parseInt(page, 10) : 1;
-            const currentLimit = limit ? parseInt(limit, 10) : 10;
             const offset = (currentPage - 1) * currentLimit;
 
             contracts = await contractModel.findAllWithFilters({
@@ -67,6 +69,7 @@ const dashboard = async (req, res) => {
             }
             salesUsers = users.filter(u => u.is_sales || u.role === 'salesperson');
         }
+        console.log('Admin Dashboard: Rendering view');
         res.render('admin', {
             title: '管理員後台',
             users: users,
@@ -77,13 +80,14 @@ const dashboard = async (req, res) => {
                 start_date: start_date || '',
                 end_date: end_date || '',
                 status: status || 'ALL',
-                limit: limit ? parseInt(limit, 10) : 10
+                limit: currentLimit
             },
-            pagination // Pass pagination to view
+            pagination: pagination || { current: 1, total: 1, limit: 10 }
         });
     } catch (error) {
         console.error('Failed to load admin page:', error);
-        res.status(500).send('無法載入管理員頁面');
+        console.error(error.stack); // Log stack trace
+        res.status(500).send('無法載入管理員頁面: ' + error.message);
     }
 };
 

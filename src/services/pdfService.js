@@ -7,19 +7,40 @@ const path = require('path');
 const CERT_PATH = path.join(__dirname, '../../certs/certificate.p12');
 const CERT_PASSWORD = process.env.CERT_PASSWORD || 'secret'; // Default or from env
 
+let browserInstance = null;
+
+/**
+ * Get or create a Puppeteer browser instance
+ */
+async function getBrowser() {
+    if (browserInstance) return browserInstance;
+
+    console.log('DEBUG: Launching Puppeteer...');
+    const puppeteer = require('puppeteer');
+    browserInstance = await puppeteer.launch({
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage', // Memory optimization for Docker/Linux
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu'
+        ],
+        headless: 'new'
+    });
+
+    // Cleanup on process exit
+    process.on('exit', () => browserInstance?.close());
+    return browserInstance;
+}
+
 /**
  * Generate PDF from HTML content
  * @param {string} htmlContent - The HTML string
  * @returns {Promise<Buffer>} - PDF Buffer
  */
 async function generatePdfFromHtml(htmlContent) {
-    console.log('DEBUG: Requiring puppeteer (Lazy Load)...');
-    const puppeteer = require('puppeteer');
-    const browser = await puppeteer.launch({
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for some environments
-        headless: 'new'
-    });
+    const browser = await getBrowser();
     const page = await browser.newPage();
 
     // Set content and wait for network idle to ensure images load
@@ -55,7 +76,7 @@ async function generatePdfFromHtml(htmlContent) {
         margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
     });
 
-    await browser.close();
+    await page.close(); // Close page, not browser
     return Buffer.from(pdfBuffer);
 }
 
@@ -65,54 +86,50 @@ async function generatePdfFromHtml(htmlContent) {
  * @param {string} signatureBase64 - Data URL or base64 string
  * @returns {Promise<Buffer>}
  */
-async function addSignatureAndFlatten(pdfBuffer, signatureBase64) {
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    const pages = pdfDoc.getPages();
+async function addSignatureAndFlatten(pdfDoc, signatureBase64) {
+    const isBuffer = Buffer.isBuffer(pdfDoc);
+    const doc = isBuffer ? await PDFDocument.load(pdfDoc) : pdfDoc;
+
+    const pages = doc.getPages();
     if (pages.length === 0) {
         throw new Error('PDF has no pages');
     }
-    const lastPage = pages[pages.length - 1]; // Assumption: Signature on last page
+    const lastPage = pages[pages.length - 1];
 
     // Embed PNG/JPG
     let signatureImage;
     if (signatureBase64.startsWith('data:image/png')) {
-        signatureImage = await pdfDoc.embedPng(signatureBase64);
+        signatureImage = await doc.embedPng(signatureBase64);
     } else if (signatureBase64.startsWith('data:image/jpeg') || signatureBase64.startsWith('data:image/jpg')) {
-        signatureImage = await pdfDoc.embedJpg(signatureBase64);
+        signatureImage = await doc.embedJpg(signatureBase64);
     } else {
-        // Try guessing or assume PNG if just base64
         try {
-            signatureImage = await pdfDoc.embedPng(signatureBase64);
+            signatureImage = await doc.embedPng(signatureBase64);
         } catch (e) {
-            signatureImage = await pdfDoc.embedJpg(signatureBase64);
+            signatureImage = await doc.embedJpg(signatureBase64);
         }
     }
 
-    // Use fixed width/height for signature to ensure consistency
-    const TARGET_WIDTH = 120; // Default signature width
+    const TARGET_WIDTH = 120;
     const imgProps = signatureImage.scale(1.0);
     const scale = TARGET_WIDTH / imgProps.width;
     const width = imgProps.width * scale;
     const height = imgProps.height * scale;
 
-    const { width: pageWidth, height: pageHeight } = lastPage.getSize();
+    const { width: pageWidth } = lastPage.getSize();
 
-    // Draw at bottom right (approximate position)
     lastPage.drawImage(signatureImage, {
         x: pageWidth - width - 60,
-        y: 80, // Slightly higher for visibility
+        y: 80,
         width,
         height,
     });
 
-    // Flatten: pdf-lib doesn't have a "flatten all" that rasterizes, 
-    // but flattening form fields is done via form.flatten(). 
-    // Since we start from HTML, there are no fields. 
-    // The requirement "Flatten" likely means "Burn into PDF", which drawImage does.
-
-    // Save
-    const pdfBytes = await pdfDoc.save();
-    return Buffer.from(pdfBytes);
+    if (isBuffer) {
+        const pdfBytes = await doc.save();
+        return Buffer.from(pdfBytes);
+    }
+    return doc;
 }
 
 /**
@@ -121,14 +138,13 @@ async function addSignatureAndFlatten(pdfBuffer, signatureBase64) {
  * @param {object} auditInfo - { ip, timestamp, uuid, signerName }
  * @returns {Promise<Buffer>}
  */
-async function addAuditPage(pdfBuffer, auditInfo) {
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    if (pdfDoc.getPageCount() === 0) {
-        // If empty, creating first page instead of adding one might be safer but addPage is fine
-    }
-    const page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+async function addAuditPage(pdfDoc, auditInfo) {
+    const isBuffer = Buffer.isBuffer(pdfDoc);
+    const doc = isBuffer ? await PDFDocument.load(pdfDoc) : pdfDoc;
+
+    const page = doc.addPage();
+    const { height } = page.getSize();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
     const fontSize = 12;
 
     const drawText = (text, y) => {
@@ -136,8 +152,6 @@ async function addAuditPage(pdfBuffer, auditInfo) {
     };
 
     let y = height - 50;
-
-    // Header
     page.drawText('Audit Log / Certificate of Completion', { x: 50, y, size: 18, font, color: rgb(0, 0, 0) });
     y -= 40;
 
@@ -151,11 +165,13 @@ async function addAuditPage(pdfBuffer, auditInfo) {
     y -= 20;
     drawText(`Verification Code: ${auditInfo.verificationCode || 'N/A'}`, y);
 
-    // Footer
     page.drawText('Generated by Jollify System', { x: 50, y: 30, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
 
-    const pdfBytes = await pdfDoc.save();
-    return Buffer.from(pdfBytes);
+    if (isBuffer) {
+        const pdfBytes = await doc.save();
+        return Buffer.from(pdfBytes);
+    }
+    return doc;
 }
 
 /**
@@ -212,13 +228,14 @@ async function generateContractPdfBuffer(contract, signatureBase64, auditInfo) {
     }
     const html = renderTemplateWithVariables(contract.template_content, contract.variable_values, variables, {
         wrapBold: true,
-        // no signatureImage here because we flatten it manually
     });
     console.log('DEBUG: HTML Rendered. Length:', html.length);
 
-    console.log('DEBUG: Calling generatePdfFromHtml...');
-    let pdf = await generatePdfFromHtml(html);
-    console.log('DEBUG: PDF Base generated. Size:', pdf.length);
+    console.log('DEBUG: Generating initial PDF from HTML...');
+    const htmlPdfBuffer = await generatePdfFromHtml(html);
+
+    // Load into pdf-lib to start multi-step manipulation
+    let pdfDoc = await PDFDocument.load(htmlPdfBuffer);
 
     // Merge with Base PDF if exists
     if (contract.template_base_pdf_id) {
@@ -226,33 +243,32 @@ async function generateContractPdfBuffer(contract, signatureBase64, auditInfo) {
         try {
             const basePdfFile = await fileModel.getFile(contract.template_base_pdf_id);
             if (basePdfFile && basePdfFile.data) {
-                const mainPdfDoc = await PDFDocument.load(basePdfFile.data);
-                const htmlPdfDoc = await PDFDocument.load(pdf);
-
-                // Copy pages from HTML PDF to Main PDF (Append mode)
-                const htmlPages = await mainPdfDoc.copyPages(htmlPdfDoc, htmlPdfDoc.getPageIndices());
-                htmlPages.forEach(page => mainPdfDoc.addPage(page));
-
-                const mergedBytes = await mainPdfDoc.save();
-                pdf = Buffer.from(mergedBytes);
-                console.log('DEBUG: Merged PDF success. New Size:', pdf.length);
+                const basePdfDoc = await PDFDocument.load(basePdfFile.data);
+                const htmlPages = await basePdfDoc.copyPages(pdfDoc, pdfDoc.getPageIndices());
+                htmlPages.forEach(p => basePdfDoc.addPage(p));
+                pdfDoc = basePdfDoc; // Switch context to the merged doc
+                console.log('DEBUG: Merged PDF success.');
             }
         } catch (mergeError) {
             console.error('Failed to merge with base PDF:', mergeError);
-            // Continue with only HTML PDF if merge fails
         }
     }
 
     if (signatureBase64) {
         console.log('DEBUG: Adding signature to PDF...');
-        pdf = await addSignatureAndFlatten(pdf, signatureBase64);
+        pdfDoc = await addSignatureAndFlatten(pdfDoc, signatureBase64);
     }
+
     if (auditInfo) {
         console.log('DEBUG: Adding audit page...');
-        pdf = await addAuditPage(pdf, auditInfo);
+        pdfDoc = await addAuditPage(pdfDoc, auditInfo);
     }
-    pdf = await digitallySignPdf(pdf);
-    return pdf;
+
+    // Final save after all modifications
+    const finalBuffer = Buffer.from(await pdfDoc.save());
+
+    // Digital Signature (requires buffer)
+    return await digitallySignPdf(finalBuffer);
 }
 
 /**

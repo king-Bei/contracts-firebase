@@ -13,8 +13,10 @@ const dbConfig = connectionString ? { connectionString } : {
   port: process.env.DB_PORT || 5432,
 };
 
+// 延後檢查：不要在 require 時拋出錯誤，讓伺服器能先啟動
 if (!connectionString && !process.env.DB_HOST) {
-  throw new Error('Database configuration missing. Please set DATABASE_URL or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME.');
+  console.error('❌ 嚴重錯誤：找不到資料庫配置。請設定 DATABASE_URL 或 DB_HOST 相關環境變數。');
+  // 這裡不 throw，讓 pool 在產生的時候才報錯，或者在 initDb 時才顯示
 }
 
 const pool = new Pool({

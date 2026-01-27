@@ -1,4 +1,9 @@
 // 確保在本地開發時能加載 .env 檔案
+console.log('🚀 應用程式正在啟動...');
+process.on('uncaughtException', (err) => {
+  console.error('💥 未捕獲的異常 (Startup):', err);
+});
+
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }

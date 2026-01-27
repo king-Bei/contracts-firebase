@@ -35,6 +35,7 @@ async function createContractsTable() {
 
     // New columns for re-architecture
     await db.query('ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signature_file_id UUID;');
+    await db.query('ALTER TABLE contracts ADD COLUMN IF NOT EXISTS contract_number VARCHAR(100);');
 
     // Determine if we should drop the plaintext code column for security (Migration step)
     // For now we just won't write to it, keeping data for legacy support if needed, 

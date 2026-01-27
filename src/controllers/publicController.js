@@ -335,8 +335,13 @@ const submitSignature = async (req, res) => {
 
         res.render('success', { title: '簽署完成' });
     } catch (error) {
-        console.error('Failed to submit signature:', error);
-        res.status(500).send('簽署失敗，請稍後再試。');
+        console.error('💥 CRITICAL FAILURE in submitSignature:');
+        console.error('Error Name:', error.name);
+        console.error('Error Message:', error.message);
+        console.error('Error Stack:', error.stack);
+        if (error.cause) console.error('Error Cause:', error.cause);
+
+        res.status(500).send(`簽署失敗 - 錯誤訊息: ${error.message}`);
     }
 };
 

@@ -40,7 +40,9 @@ async function getBrowser() {
  * @returns {Promise<Buffer>} - PDF Buffer
  */
 async function generatePdfFromHtml(htmlContent) {
+    console.log('DEBUG: [PDF] Attempting to get browser...');
     const browser = await getBrowser();
+    console.log('DEBUG: [PDF] Opening new page...');
     const page = await browser.newPage();
 
     // Set content and wait for network idle to ensure images load
@@ -265,9 +267,11 @@ async function generateContractPdfBuffer(contract, signatureBase64, auditInfo) {
     }
 
     // Final save after all modifications
+    console.log('DEBUG: [PDF] Saving final PDF Document...');
     const finalBuffer = Buffer.from(await pdfDoc.save());
 
     // Digital Signature (requires buffer)
+    console.log('DEBUG: [PDF] Entering digital signing step...');
     return await digitallySignPdf(finalBuffer);
 }
 

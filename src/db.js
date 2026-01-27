@@ -3,7 +3,25 @@
 const { Pool } = require('pg');
 
 // 從環境變數中讀取資料庫連線資訊
-const connectionString = process.env.DATABASE_URL;
+let connectionString = process.env.DATABASE_URL;
+
+// 特殊處理：如果 DATABASE_URL 中的密碼包含 @ 符號，可能會導致 pg 解析錯誤
+if (connectionString && connectionString.includes('@') && connectionString.split('@').length > 2) {
+  console.log('DEBUG: Detected potential unencoded @ in DATABASE_URL. Attempting fix...');
+  try {
+    const parts = connectionString.match(/^(postgresql:\/\/)([^:]+):(.+)(@.+)$/);
+    if (parts) {
+      const [, proto, user, pass, hostPortDb] = parts;
+      // 如果密碼中還有 @，將其編碼
+      if (pass.includes('@')) {
+        connectionString = `${proto}${user}:${encodeURIComponent(pass)}${hostPortDb}`;
+        console.log('DEBUG: Encoded password @ in connectionString.');
+      }
+    }
+  } catch (e) {
+    console.warn('DEBUG: Failed to auto-fix connectionString encoding:', e.message);
+  }
+}
 
 const dbConfig = connectionString ? { connectionString } : {
   user: process.env.DB_USER,

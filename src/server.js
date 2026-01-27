@@ -35,23 +35,33 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
-console.log('DEBUG: [3/5] Requiring internal models and routes...');
-// Database Initialization Models (Moved to top)
+console.log('DEBUG: [STARTUP] Loading routes and models...');
+
+console.log('DEBUG: -> Loading userModel');
 const userModel = require('./models/userModel');
+console.log('DEBUG: -> Loading contractTemplateModel');
 const contractTemplateModel = require('./models/contractTemplateModel');
+console.log('DEBUG: -> Loading contractModel');
 const contractModel = require('./models/contractModel');
+console.log('DEBUG: -> Loading fileModel');
 const fileModel = require('./models/fileModel');
 
-// Routes
+console.log('DEBUG: -> Loading authRoutes');
 const authRoutes = require('./routes/authRoutes');
+console.log('DEBUG: -> Loading adminRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+console.log('DEBUG: -> Loading templateRoutes');
 const templateRoutes = require('./routes/templateRoutes');
+console.log('DEBUG: -> Loading salesRoutes');
 const salesRoutes = require('./routes/salesRoutes');
+console.log('DEBUG: -> Loading managerRoutes');
 const managerRoutes = require('./routes/managerRoutes');
+console.log('DEBUG: -> Loading publicRoutes');
 const publicRoutes = require('./routes/publicRoutes');
-console.log('DEBUG: [4/5] Internal modules loaded.');
 
-// Middleware
+console.log('DEBUG: [STARTUP] Internal modules loaded.');
+
+console.log('DEBUG: -> Loading middleware');
 const { checkAuth, checkAdmin, checkManager } = require('./middleware/authMiddleware');
 
 console.log('DEBUG: Configuring middleware...');

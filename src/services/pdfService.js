@@ -1,4 +1,3 @@
-const puppeteer = require('puppeteer');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const signer = require('node-signpdf').default;
 const { plainAddPlaceholder } = require('node-signpdf/dist/helpers');
@@ -14,6 +13,8 @@ const CERT_PASSWORD = process.env.CERT_PASSWORD || 'secret'; // Default or from 
  * @returns {Promise<Buffer>} - PDF Buffer
  */
 async function generatePdfFromHtml(htmlContent) {
+    console.log('DEBUG: Requiring puppeteer (Lazy Load)...');
+    const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
         args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for some environments

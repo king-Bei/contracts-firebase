@@ -1,14 +1,27 @@
 // 確保在本地開發時能加載 .env 檔案
-console.log('🚀 應用程式正在啟動...');
+console.log('🚀 應用程式啟動中 (Server Startup)...');
+console.log(`DEBUG: Environment = ${process.env.NODE_ENV}, PORT = ${process.env.PORT || 8080}`);
+
 process.on('uncaughtException', (err) => {
-  console.error('💥 未捕獲的異常 (Startup):', err);
+  console.error('💥 未捕獲的異常 (Uncaught Exception):', err);
 });
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 未處理的 Promise 拒絕 (Unhandled Rejection):', reason);
+});
+
+const express = require('express');
+const app = express();
+
+// Health Check Endpoint (最優先就緒，確保 Cloud Run 端點探測能通過)
+app.get('/healthz', (req, res) => { res.status(200).send('OK'); });
+
 if (process.env.NODE_ENV !== 'production') {
+  console.log('DEBUG: Loading .env file');
   require('dotenv').config();
 }
 
-const express = require('express');
+console.log('DEBUG: Requiring modules...');
 const path = require('path');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
@@ -33,7 +46,7 @@ const publicRoutes = require('./routes/publicRoutes');
 // Middleware
 const { checkAuth, checkAdmin, checkManager } = require('./middleware/authMiddleware');
 
-const app = express();
+console.log('DEBUG: Configuring middleware...');
 // 在 Cloud Run 或其他代理後端運行時，必須信任 proxy 才能正確設定 secure cookie
 app.set('trust proxy', 1);
 
@@ -179,8 +192,7 @@ async function initDb() {
   }
 }
 
-// Health Check Endpoint
-app.get('/healthz', (req, res) => { res.status(200).send('OK'); });
+// Health Check Endpoint is at the top of the file
 
 // Server Start
 app.listen(PORT, () => {

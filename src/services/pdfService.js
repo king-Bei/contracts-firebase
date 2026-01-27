@@ -100,16 +100,26 @@ async function addSignatureAndFlatten(pdfDoc, signatureBase64) {
 
     // Embed PNG/JPG
     let signatureImage;
-    if (signatureBase64.startsWith('data:image/png')) {
-        signatureImage = await doc.embedPng(signatureBase64);
-    } else if (signatureBase64.startsWith('data:image/jpeg') || signatureBase64.startsWith('data:image/jpg')) {
-        signatureImage = await doc.embedJpg(signatureBase64);
-    } else {
-        try {
-            signatureImage = await doc.embedPng(signatureBase64);
-        } catch (e) {
-            signatureImage = await doc.embedJpg(signatureBase64);
+    try {
+        const base64Data = signatureBase64.includes(';base64,')
+            ? signatureBase64.split(';base64,').pop()
+            : signatureBase64;
+
+        const imageBytes = Buffer.from(base64Data, 'base64');
+
+        if (signatureBase64.startsWith('data:image/png') || !signatureBase64.startsWith('data:image/')) {
+            // Attempt PNG first if no prefix or if png prefix
+            try {
+                signatureImage = await doc.embedPng(imageBytes);
+            } catch (pngErr) {
+                signatureImage = await doc.embedJpg(imageBytes);
+            }
+        } else {
+            signatureImage = await doc.embedJpg(imageBytes);
         }
+    } catch (embedError) {
+        console.error('DEBUG: [PDF] Failed to embed signature image:', embedError.message);
+        throw new Error('無法嵌入簽名圖像: ' + embedError.message);
     }
 
     const TARGET_WIDTH = 120;

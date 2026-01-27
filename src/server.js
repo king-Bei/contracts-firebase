@@ -15,18 +15,13 @@ const app = express();
 
 const PORT = process.env.PORT || 8080;
 
-// Health Check Endpoint (最優先就緒)
+// 1. Health Check Endpoint (最優先就緒，確保 Cloud Run 探測能通過)
 app.get('/healthz', (req, res) => {
   console.log('DEBUG: Health check received');
   res.status(200).send('OK');
 });
 
-// 立即啟動監聽以繞過 Cloud Run 的啟動超時檢查
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Server is pre-listening on http://0.0.0.0:${PORT}`);
-  console.log(`🚀 就緒探測頁面: http://0.0.0.0:${PORT}/healthz`);
-});
-
+// 2. 加載所有模組與設定中介軟體 (移到 listen 之前)
 if (process.env.NODE_ENV !== 'production') {
   console.log('DEBUG: Loading .env file');
   require('dotenv').config();
@@ -213,6 +208,14 @@ async function initDb() {
 
 // Health Check Endpoint is at the top of the file
 
-console.log('DEBUG: [5/5] All modules configured and initialization started.');
-// Initialize DB in background
-initDb();
+console.log('DEBUG: [5/5] All modules configured. Starting server...');
+
+// 5. Server Start
+// 在 Cloud Run 等容器環境中，必須監聽 0.0.0.0 而非 localhost
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server is running on http://0.0.0.0:${PORT}`);
+  console.log(`🚀 就緒探測頁面: http://0.0.0.0:${PORT}/healthz`);
+
+  // 背景初始化資料庫
+  initDb();
+});

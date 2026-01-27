@@ -63,8 +63,6 @@ console.log('DEBUG: Configuring middleware...');
 // 在 Cloud Run 或其他代理後端運行時，必須信任 proxy 才能正確設定 secure cookie
 app.set('trust proxy', 1);
 
-const PORT = process.env.PORT || 8080;
-
 // --- 檢查必要環境變數 ---
 function checkEnvVars() {
   const required = ['DATABASE_URL', 'SESSION_SECRET'];

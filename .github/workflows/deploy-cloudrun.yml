@@ -52,13 +52,13 @@ jobs:
           image: ${{ steps.build.outputs.image }}
           secrets: [
             "SESSION_SECRET=SESSION_SECRET:latest",
-            # --- 請根據您的資料庫設定，在此處添加對應的環境變數 ---
-            # 您的應用程式需要這些變數才能連接到資料庫。
-            # 您需要先在 Google Secret Manager 中建立這些密鑰。
-            "DB_USER=DB_USER:latest",
-            "DB_PASSWORD=DB_PASSWORD:latest",
-            "DB_NAME=DB_NAME:latest",
-            "DB_HOST=DB_HOST:latest" # 如果使用 Cloud SQL，這裡可能是 INSTANCE_CONNECTION_NAME
+            "DATABASE_URL=DATABASE_URL:latest",
+            "CERT_PASSWORD=CERT_PASSWORD:latest",
+            "ENABLE_DRIVE_BACKUP=ENABLE_DRIVE_BACKUP:latest",
+            "GOOGLE_SERVICE_ACCOUNT_EMAIL=GOOGLE_SERVICE_ACCOUNT_EMAIL:latest",
+            "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:latest",
+            "GOOGLE_DRIVE_FOLDER_ID=GOOGLE_DRIVE_FOLDER_ID:latest",
+            "NODE_ENV=NODE_ENV:latest"
           ]
           allow-unauthenticated: true
 

@@ -2,22 +2,28 @@
 
 const { Pool } = require('pg');
 
-// 從環境變數中讀取資料庫連線 URL
-// 這是連接到 Supabase 或其他託管資料庫的推薦方式
+// 從環境變數中讀取資料庫連線資訊
 const connectionString = process.env.DATABASE_URL;
 
-if (!connectionString) {
-  throw new Error('DATABASE_URL environment variable is not set. Please check your .env file.');
+const dbConfig = connectionString ? { connectionString } : {
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT || 5432,
+};
+
+if (!connectionString && !process.env.DB_HOST) {
+  throw new Error('Database configuration missing. Please set DATABASE_URL or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME.');
 }
 
 const pool = new Pool({
-  connectionString: connectionString,
+  ...dbConfig,
   // 連接到 Supabase 或其他雲端資料庫需要 SSL
-  ssl: {
-    rejectUnauthorized: false, // 在本地開發時可以接受，生產環境建議使用更嚴格的設定
-  },
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false,
+  } : false,
   client_encoding: 'UTF8',
-  // 強制使用 IPv4 避免某些環境下解析到 IPv6 導致連線失敗
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,

@@ -1,30 +1,37 @@
-# 使用官方 Node.js 18 (或更新版本) 作為基礎映像
-FROM node:18-alpine
+# 使用 Debian-based Node.js 基礎映像，Puppeteer 在 Debian 上更容易安裝依賴
+FROM node:18-bullseye-slim
 
-# 建立一個非 root 使用者 node 並建立 /home/node 目錄
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# 安裝 Puppeteer 執行所在的 Chromium 依賴
+RUN apt-get update && apt-get install -y \
+    chromium \
+    fonts-ipafont-gothic fonts-freefont-ttf fonts-kacst fonts-thai-tlwg fonts-wqy-zenhei \
+    libnss3 libatk-bridge1.0-0 libxcomposite1 libxrandr2 libxdamage1 libxkbcommon0 \
+    libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
-# 設定工作目錄，並將擁有者設為 appuser
+# 設定環境變數讓 Puppeteer 使用系統安裝的 Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# 建立並切換工作目錄
 WORKDIR /usr/src/app
-RUN chown -R appuser:appgroup /usr/src/app
-USER appuser
 
-# 複製 package.json 和 package-lock.json (如果存在)
+# 複製 package.json 和 package-lock.json
 COPY package*.json ./
 
-# 安裝專案依賴 (僅限 production)
-# 使用 npm ci 可以確保依賴版本與 package-lock.json 一致，安裝速度也更快
+# 安裝依賴 (僅限 production)
 RUN npm ci --only=production
 
-# 複製所有程式碼到工作目錄
-# .dockerignore 檔案會確保不必要的檔案不會被複製進來
+# 複製程式碼
 COPY . .
 
-# Cloud Run 會將 $PORT 環境變數傳遞給容器，但我們必須在 Dockerfile 中暴露一個 PORT 
-# (Express 程式碼中會使用 process.env.PORT)
-# 雖然 Cloud Run 會覆寫，但 EXPOSE 是一個好的文件說明
+# 設定非 root 使用者 (使用內建的 node 使用者)
+RUN chown -R node:node /usr/src/app
+USER node
+
+# 暴露埠號
 EXPOSE 8080
 
-# 容器啟動時執行的指令
-# Cloud Run 預設會執行這個 CMD
+# 啟動應用程式
 CMD [ "npm", "start" ]

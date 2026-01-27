@@ -5,7 +5,7 @@ FROM node:18-bullseye-slim
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-ipafont-gothic fonts-freefont-ttf fonts-kacst fonts-thai-tlwg fonts-wqy-zenhei \
-    libnss3 libatk-bridge1.0-0 libxcomposite1 libxrandr2 libxdamage1 libxkbcommon0 \
+    libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxrandr2 libxdamage1 libxkbcommon0 \
     libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*

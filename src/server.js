@@ -53,12 +53,20 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
 // --- 檢查必要環境變數 ---
-if (!process.env.SESSION_SECRET) {
-  console.warn('⚠️  警告：未設定 SESSION_SECRET 環境變數！');
-  console.warn('⚠️  系統將自動產生一組臨時密鑰，這會導致每次重啟伺服器時所有使用者需重新登入。');
-  console.warn('⚠️  請在生產環境 (Cloud Run 等) 的環境變數設定中加入 SESSION_SECRET。');
-  process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+function checkEnvVars() {
+  const required = ['DATABASE_URL', 'SESSION_SECRET'];
+  const missing = required.filter(key => !process.env[key]);
+
+  if (missing.length > 0) {
+    console.warn(`⚠️  警告：缺少部分環境變數: ${missing.join(', ')}`);
+    if (!process.env.SESSION_SECRET) {
+      console.warn('⚠️  SESSION_SECRET 未設定，將自動產生臨時密鑰。這會導致重啟後 Session 失效。');
+      process.env.SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+    }
+    // 注意：DATABASE_URL 的檢查交由 db.js 處理，或者在此處拋出錯誤以阻止啟動
+  }
 }
+checkEnvVars();
 
 // --- 設定 View Engine ---
 app.set('view engine', 'ejs');
@@ -195,7 +203,9 @@ async function initDb() {
 // Health Check Endpoint is at the top of the file
 
 // Server Start
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// 在 Cloud Run 等容器環境中，必須監聽 0.0.0.0 而非 localhost
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server is running on http://0.0.0.0:${PORT}`);
+  console.log(`🚀 就緒探測頁面: http://0.0.0.0:${PORT}/healthz`);
   initDb();
 });

@@ -10,11 +10,15 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('💥 未處理的 Promise 拒絕 (Unhandled Rejection):', reason);
 });
 
+console.log('DEBUG: [1/5] Loading express...');
 const express = require('express');
 const app = express();
-
+console.log('DEBUG: [2/5] Setting up health check...');
 // Health Check Endpoint (最優先就緒，確保 Cloud Run 端點探測能通過)
-app.get('/healthz', (req, res) => { res.status(200).send('OK'); });
+app.get('/healthz', (req, res) => {
+  console.log('DEBUG: Health check received');
+  res.status(200).send('OK');
+});
 
 if (process.env.NODE_ENV !== 'production') {
   console.log('DEBUG: Loading .env file');
@@ -29,6 +33,7 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
+console.log('DEBUG: [3/5] Requiring internal models and routes...');
 // Database Initialization Models (Moved to top)
 const userModel = require('./models/userModel');
 const contractTemplateModel = require('./models/contractTemplateModel');
@@ -42,6 +47,7 @@ const templateRoutes = require('./routes/templateRoutes');
 const salesRoutes = require('./routes/salesRoutes');
 const managerRoutes = require('./routes/managerRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+console.log('DEBUG: [4/5] Internal modules loaded.');
 
 // Middleware
 const { checkAuth, checkAdmin, checkManager } = require('./middleware/authMiddleware');
@@ -202,6 +208,7 @@ async function initDb() {
 
 // Health Check Endpoint is at the top of the file
 
+console.log('DEBUG: [5/5] All modules configured. Attempting to listen...');
 // Server Start
 // 在 Cloud Run 等容器環境中，必須監聽 0.0.0.0 而非 localhost
 app.listen(PORT, '0.0.0.0', () => {

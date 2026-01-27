@@ -174,9 +174,11 @@ async function initDb() {
   }
 }
 
+// Health Check Endpoint
+app.get('/healthz', (req, res) => { res.status(200).send('OK'); });
+
 // Server Start
-initDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+  initDb();
 });

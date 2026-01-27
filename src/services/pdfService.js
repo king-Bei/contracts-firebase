@@ -15,6 +15,7 @@ const CERT_PASSWORD = process.env.CERT_PASSWORD || 'secret'; // Default or from 
  */
 async function generatePdfFromHtml(htmlContent) {
     const browser = await puppeteer.launch({
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
         args: ['--no-sandbox', '--disable-setuid-sandbox'], // Required for some environments
         headless: 'new'
     });

@@ -20,7 +20,8 @@ if (!connectionString && !process.env.DB_HOST) {
 const pool = new Pool({
   ...dbConfig,
   // 連接到 Supabase 或其他雲端資料庫需要 SSL
-  ssl: process.env.NODE_ENV === 'production' ? {
+  // 在 Cloud Run 環境 (PORT=8080 且有 K_SERVICE) 或非 localhost 時強制啟用 SSL
+  ssl: (process.env.K_SERVICE || (process.env.DB_HOST && !process.env.DB_HOST.includes('localhost'))) ? {
     rejectUnauthorized: false,
   } : false,
   client_encoding: 'UTF8',
